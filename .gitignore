@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# venv
+.venv/
+venv/
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+
+# Runtime data (NICHT versionieren!)
+/var/
+/logs/
+*.log
+*.sqlite
+*.db
+
+# Local config (enthält Tokens/Secrets)
+config.json
+/etc/mas004_rpi_databridge/config.json
+
+# Temp uploads
+/tmp/

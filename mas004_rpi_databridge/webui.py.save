@@ -1,0 +1,140 @@
+from typing import Optional, Dict, Any
+
+from fastapi import FastAPI, Request, HTTPException, Header
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+import subprocess
+
+from mas004_rpi_databridge.config import Settings, DEFAULT_CFG_PATH
+from mas004_rpi_databridge.db import DB
+from mas004_rpi_databridge.outbox import Outbox
+from mas004_rpi_databridge.inbox import Inbox
+
+
+def require_token(x_token: Optional[str], cfg: Settings):
+    if cfg.ui_token and x_token != cfg.ui_token:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+class ConfigUpdate(BaseModel):
+    peer_base_url: Optional[str] = None
+    peer_watchdog_host: Optional[str] = None
+    peer_health_path: Optional[str] = None
+    tls_verify: Optional[bool] = None
+    http_timeout_s: Optional[float] = None
+    eth0_source_ip: Optional[str] = None
+    webui_port: Optional[int] = None
+    ui_token: Optional[str] = None
+
+
+class OutboxEnqueue(BaseModel):
+    method: str = "POST"
+    path: str = "/api/inbox"
+    url: Optional[str] = None
+    headers: Dict[str, Any] = {}
+    body: Optional[Dict[str, Any]] = None
+    idempotency_key: Optional[str] = None
+
+
+def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
+    app = FastAPI(title="MAS-004_RPI-Databridge", version="0.1.0")
+
+    cfg = Settings.load(cfg_path)
+    db = DB(cfg.db_path)
+    outbox = Outbox(db)
+    inbox = Inbox(db)
+
+    @app.get("/", response_class=HTMLResponse)
+    def home():
+        cfg2 = Settings.load(cfg_path)
+        return f"""
+        <html><body style="font-family:Arial;max-width:900px;margin:20px">
+        <h2>MAS-004_RPI-Databridge</h2>
+        <p><b>eth0:</b> {cfg2.eth0_ip} | <b>eth1:</b> {cfg2.eth1_ip}</p>
+        <p><b>Outbox:</b> {outbox.count()} | <b>Inbox pending:</b> {inbox.count_pending()}</p>
+        <p><b>Peer:</b> {cfg2.peer_base_url} | Watchdog: {cfg2.peer_watchdog_host}</p>
+        <p>Docs: <a href="/docs">/docs</a></p>
+        </body></html>
+        """
+
+    @app.get("/health")
+    def health():
+        return {"ok": True}
+
+    @app.get("/api/config")
+    def get_config():
+        cfg2 = Settings.load(cfg_path)
+        d = cfg2.__dict__.copy()
+        d["ui_token"] = "***"
+        return d
+
+    @app.post("/api/config")
+    def update_config(u: ConfigUpdate, x_token: Optional[str] = Header(default=None)):
+        cfg2 = Settings.load(cfg_path)
+        require_token(x_token, cfg2)
+
+        for k, v in u.model_dump().items():
+            if v is not None:
+                setattr(cfg2, k, v)
+
+        cfg2.save(cfg_path)
+        subprocess.call(["bash", "-lc", "systemctl restart mas004-rpi-databridge.service"])
+        return {"ok": True}
+
+    @app.post("/api/outbox/enqueue")
+    def api_outbox_enqueue(req: OutboxEnqueue, x_token: Optional[str] = Header(default=None)):
+        cfg2 = Settings.load(cfg_path)
+        require_token(x_token, cfg2)
+
+        url = req.url if req.url else cfg2.peer_base_url.rstrip("/") + req.path
+        idem = outbox.enqueue(req.method, url, req.headers, req.body, req.idempotency_key)
+        return {"ok": True, "idempotency_key": idem}
+
+    @app.post("/api/inbox")
+    async def api_inbox(request: Request, x_idempotency_key: Optional[str] = Header(default=None)):
+        body = None
+        cfg2 = Settings.load(cfg_path)
+        if cfg2.shared_secret and x_shared_secret != cfg2.shared_secret:
+            raise HTTPException(status_code=401, detail="Unauthorized")        cfg2 = Settings.load(cfg_path)
+        if cfg2.shared_secret and x_shared_secret != cfg2.shared_secret:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+        try:
+            body = await request.json()
+        except Exception:
+            body = None
+
+        headers = dict(request.headers)
+        idem = x_idempotency_key or headers.get("x-idempotency-key") or "missing"
+        source = request.client.host if request.client else None
+        inserted = inbox.store(source, headers, body, idem)
+        return {"ok": True, "stored": inserted, "idempotency_key": idem}
+
+    @app.get("/api/inbox/next")
+    def api_inbox_next(x_token: Optional[str] = Header(default=None)):
+        cfg2 = Settings.load(cfg_path)
+        require_token(x_token, cfg2)
+
+        msg = inbox.next_pending()
+        if not msg:
+            return {"ok": True, "msg": None}
+
+        return {
+            "ok": True,
+            "msg": {
+                "id": msg.id,
+                "received_ts": msg.received_ts,
+                "source": msg.source,
+                "headers_json": msg.headers_json,
+                "body_json": msg.body_json,
+                "idempotency_key": msg.idempotency_key,
+            },
+        }
+
+    @app.post("/api/inbox/{msg_id}/ack")
+    def api_inbox_ack(msg_id: int, x_token: Optional[str] = Header(default=None)):
+        cfg2 = Settings.load(cfg_path)
+        require_token(x_token, cfg2)
+        inbox.ack(msg_id)
+        return {"ok": True}
+
+    return app

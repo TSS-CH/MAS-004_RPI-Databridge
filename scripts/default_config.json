@@ -1,0 +1,19 @@
+{
+  "db_path": "/var/lib/mas004_rpi_databridge/databridge.db",
+  "webui_host": "0.0.0.0",
+  "webui_port": 8080,
+  "eth0_ip": "192.168.1.100",
+  "eth1_ip": "192.168.2.100",
+  "eth0_source_ip": "192.168.1.100",
+  "peer_base_url": "https://192.168.1.10",
+  "peer_watchdog_host": "192.168.1.10",
+  "peer_health_path": "/health",
+  "watchdog_interval_s": 2.0,
+  "watchdog_timeout_s": 1.0,
+  "watchdog_down_after": 3,
+  "http_timeout_s": 10.0,
+  "tls_verify": true,
+  "retry_base_s": 1.0,
+  "retry_cap_s": 60.0,
+  "ui_token": "change-me"
+}

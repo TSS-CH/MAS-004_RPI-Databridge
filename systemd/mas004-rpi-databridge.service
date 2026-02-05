@@ -1,0 +1,17 @@
+[Unit]
+Description=MAS-004_RPI-Databridge (reliable HTTPS send/receive + watchdog + web UI)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/MAS-004_RPI-Databridge
+ExecStart=/opt/MAS-004_RPI-Databridge/.venv/bin/mas004-databridge
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
