@@ -29,3 +29,14 @@ config.json
 
 # Temp uploads
 /tmp/
+
+# Uvicorn / FastAPI runtime
+*.pid
+*.sock
+
+# Uploads, falls mal im Projektordner abgelegt
+uploads/
+*.xlsx
+
+# falls jemand config unter scripts/ testet
+scripts/config.json
