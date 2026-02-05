@@ -1,7 +1,7 @@
 Config.json mit Token liegt in:
 sudo nano /etc/mas004_rpi_databridge/config.json
 
-Token:MAS004-3f9c8a2d7b1e4c6f9a0d2c5e7b8a1c3d
+Token: siehe /etc/mas004_rpi_databridge/config.json
 
 Raspi Dienst neu starten:
 sudo systemctl restart mas004-rpi-databridge.service
