@@ -1,8 +1,9 @@
 import os
-from typing import Optional
+from typing import List, Dict, Any
 from mas004_rpi_databridge.db import DB, now_ts
 
 DEFAULT_LOG_DIR = "/var/lib/mas004_rpi_databridge/logs"
+
 
 class LogStore:
     def __init__(self, db: DB, log_dir: str = DEFAULT_LOG_DIR):
@@ -18,7 +19,7 @@ class LogStore:
                 "INSERT INTO logs(ts, channel, direction, message) VALUES (?,?,?,?)",
                 (ts, channel, direction, message)
             )
-            # einfache Retention: pro Channel nur die letzten ~5000 Einträge
+            # Retention: pro Channel nur die letzten ~5000 Einträge
             c.execute(
                 """DELETE FROM logs
                    WHERE channel=?
@@ -28,7 +29,7 @@ class LogStore:
                 (channel, channel)
             )
 
-        # Datei (append)
+        # Datei
         fn = os.path.join(self.log_dir, f"{channel}.log")
         line = f"{ts:.3f}\t{direction.upper()}\t{message}\n"
         try:
@@ -37,17 +38,17 @@ class LogStore:
         except Exception:
             pass
 
-    def list_logs(self, channel: str, limit: int = 200):
+    def list_logs(self, channel: str, limit: int = 200) -> List[Dict[str, Any]]:
         limit = max(1, min(int(limit), 2000))
         with self.db._conn() as c:
             rows = c.execute(
                 "SELECT ts, direction, message FROM logs WHERE channel=? ORDER BY ts DESC LIMIT ?",
                 (channel, limit)
             ).fetchall()
-        # newest first -> UI mag oft oldest first
+        # newest first -> return oldest first
         return [{"ts": r[0], "direction": r[1], "message": r[2]} for r in rows[::-1]]
 
-    def read_logfile(self, channel: str, max_bytes: int = 200_000) -> str:
+    def read_logfile(self, channel: str, max_bytes: int = 500_000) -> str:
         fn = os.path.join(self.log_dir, f"{channel}.log")
         if not os.path.exists(fn):
             return ""
@@ -56,3 +57,32 @@ class LogStore:
         if len(data) > max_bytes:
             data = data[-max_bytes:]
         return data.decode("utf-8", errors="replace")
+
+    def clear_channel(self, channel: str) -> Dict[str, Any]:
+        # DB clear
+        with self.db._conn() as c:
+            c.execute("DELETE FROM logs WHERE channel=?", (channel,))
+
+        # file clear
+        fn = os.path.join(self.log_dir, f"{channel}.log")
+        try:
+            if os.path.exists(fn):
+                os.remove(fn)
+        except Exception:
+            pass
+        return {"ok": True}
+
+    def list_channels(self) -> List[str]:
+        # channels from DB + files
+        ch = set()
+        with self.db._conn() as c:
+            rows = c.execute("SELECT DISTINCT channel FROM logs").fetchall()
+            for r in rows:
+                ch.add(str(r[0]))
+        try:
+            for fn in os.listdir(self.log_dir):
+                if fn.endswith(".log"):
+                    ch.add(fn[:-4])
+        except Exception:
+            pass
+        return sorted(ch)
