@@ -573,11 +573,15 @@ load();
     pre{background:#111; color:#eee; padding:10px; border-radius:10px; overflow:auto; max-height:260px}
     .muted{color:#666}
     .pill{padding:2px 6px; border:1px solid #aaa; border-radius:10px; font-size:12px}
+    .bad{outline:2px solid #b00}
   </style>
 </head>
 <body>
   <h2>System Settings</h2>
-  <p class="muted">Token wird im Browser gespeichert (localStorage). Änderungen an Network können dich aussperren – daher „Apply now“ bewusst setzen.</p>
+  <p class="muted">
+    Token wird im Browser gespeichert (localStorage). Änderungen an Network können dich aussperren – daher „Apply now“ bewusst setzen.
+    <br/>Hinweis: Subnet-Maske (z.B. 255.255.255.0) und Prefix (z.B. /24) sind identisch – nur andere Schreibweise.
+  </p>
 
   <div class="row">
     <label>UI Token:</label>
@@ -589,22 +593,28 @@ load();
 
   <fieldset>
     <legend>Raspi Network (eth0/eth1)</legend>
+
     <div class="row">
-      <label>eth0 IP</label><input id="eth0_ip" style="width:160px"/>
-      <label>Prefix</label><input id="eth0_pre" style="width:60px" placeholder="24"/>
+      <label style="width:70px">eth0 IP</label><input id="eth0_ip" style="width:160px"/>
+      <label>Subnet</label><input id="eth0_mask" style="width:160px" placeholder="255.255.255.0" oninput="maskChanged('eth0')"/>
+      <label>Prefix</label><input id="eth0_pre" style="width:60px" placeholder="24" oninput="prefixChanged('eth0')"/>
       <label>GW</label><input id="eth0_gw" style="width:160px"/>
     </div>
+
     <div class="row">
-      <label>eth1 IP</label><input id="eth1_ip" style="width:160px"/>
-      <label>Prefix</label><input id="eth1_pre" style="width:60px" placeholder="24"/>
+      <label style="width:70px">eth1 IP</label><input id="eth1_ip" style="width:160px"/>
+      <label>Subnet</label><input id="eth1_mask" style="width:160px" placeholder="255.255.255.0" oninput="maskChanged('eth1')"/>
+      <label>Prefix</label><input id="eth1_pre" style="width:60px" placeholder="24" oninput="prefixChanged('eth1')"/>
       <label>GW</label><input id="eth1_gw" style="width:160px"/>
     </div>
+
     <div class="row">
       <label><input type="checkbox" id="apply_now"/> Apply now (live setzen)</label>
       <button onclick="saveNetwork()">Save Network</button>
       <button onclick="reloadAll()">Reload</button>
       <span id="net_status" class="muted"></span>
     </div>
+
     <h4>Status</h4>
     <pre id="netinfo"></pre>
   </fieldset>
@@ -674,8 +684,90 @@ async function api(path, opt={}){
   return j;
 }
 
+// ---------- Mask <-> Prefix ----------
+function prefixToMask(prefix){
+  const p = Number(prefix);
+  if(!Number.isInteger(p) || p < 0 || p > 32) return null;
+  let mask = 0 >>> 0;
+  if(p === 0) mask = 0;
+  else mask = (0xFFFFFFFF << (32 - p)) >>> 0;
+  const a = (mask >>> 24) & 255;
+  const b = (mask >>> 16) & 255;
+  const c = (mask >>> 8) & 255;
+  const d = mask & 255;
+  return `${a}.${b}.${c}.${d}`;
+}
+
+function maskToPrefix(maskStr){
+  const parts = (maskStr||"").trim().split(".");
+  if(parts.length !== 4) return null;
+  const nums = parts.map(x => Number(x));
+  if(nums.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return null;
+
+  let m = ((nums[0]<<24)>>>0) | ((nums[1]<<16)>>>0) | ((nums[2]<<8)>>>0) | (nums[3]>>>0);
+
+  // contiguous ones then zeros check
+  let seenZero = false;
+  let prefix = 0;
+  for(let i=31;i>=0;i--){
+    const bit = (m >>> i) & 1;
+    if(bit === 1){
+      if(seenZero) return null;
+      prefix++;
+    }else{
+      seenZero = true;
+    }
+  }
+  return prefix;
+}
+
+function setBad(el, bad){
+  if(bad) el.classList.add("bad");
+  else el.classList.remove("bad");
+}
+
+function maskChanged(iface){
+  const maskEl = document.getElementById(`${iface}_mask`);
+  const preEl  = document.getElementById(`${iface}_pre`);
+  const p = maskToPrefix(maskEl.value);
+  if(p === null){
+    setBad(maskEl, true);
+  }else{
+    setBad(maskEl, false);
+    preEl.value = String(p);
+    setBad(preEl, false);
+  }
+}
+
+function prefixChanged(iface){
+  const maskEl = document.getElementById(`${iface}_mask`);
+  const preEl  = document.getElementById(`${iface}_pre`);
+  const m = prefixToMask(preEl.value);
+  if(m === null){
+    setBad(preEl, true);
+  }else{
+    setBad(preEl, false);
+    maskEl.value = m;
+    setBad(maskEl, false);
+  }
+}
+
+function effectivePrefix(iface){
+  // bevorzugt: aus Maske berechnen (wenn gültig)
+  const mask = document.getElementById(`${iface}_mask`).value.trim();
+  if(mask){
+    const p = maskToPrefix(mask);
+    if(p !== null) return p;
+  }
+  // fallback: Prefix-Feld
+  const pre = Number(document.getElementById(`${iface}_pre`).value.trim());
+  if(Number.isInteger(pre) && pre >= 0 && pre <= 32) return pre;
+  return null;
+}
+
 async function reloadAll(){
   showTok();
+
   // config
   const cfg = await api("/api/config");
   const c = cfg.config;
@@ -697,27 +789,47 @@ async function reloadAll(){
   // network
   const net = await api("/api/system/network");
   const n = net.config;
+
   document.getElementById("eth0_ip").value = n.eth0_ip || "";
-  document.getElementById("eth0_pre").value = n.eth0_subnet || "";
+  document.getElementById("eth0_pre").value = n.eth0_subnet || "";     // bei dir ist das "Subnet" intern Prefix-String
+  prefixChanged("eth0");                                               // füllt Mask automatisch
   document.getElementById("eth0_gw").value = n.eth0_gateway || "";
+
   document.getElementById("eth1_ip").value = n.eth1_ip || "";
   document.getElementById("eth1_pre").value = n.eth1_subnet || "";
+  prefixChanged("eth1");
   document.getElementById("eth1_gw").value = n.eth1_gateway || "";
+
   document.getElementById("netinfo").textContent = JSON.stringify(net.status, null, 2);
 }
 
 async function saveNetwork(){
   document.getElementById("net_status").textContent = "saving...";
+
+  const p0 = effectivePrefix("eth0");
+  const p1 = effectivePrefix("eth1");
+  if(p0 === null || p1 === null){
+    alert("Subnet/Prefix ungültig. Bitte Maske (z.B. 255.255.255.0) oder Prefix (0..32) korrekt setzen.");
+    document.getElementById("net_status").textContent = "ERROR";
+    return;
+  }
+
   const payload = {
     eth0_ip: document.getElementById("eth0_ip").value.trim(),
-    eth0_prefix: Number(document.getElementById("eth0_pre").value.trim()),
+    eth0_prefix: p0,
     eth0_gateway: document.getElementById("eth0_gw").value.trim(),
     eth1_ip: document.getElementById("eth1_ip").value.trim(),
-    eth1_prefix: Number(document.getElementById("eth1_pre").value.trim()),
+    eth1_prefix: p1,
     eth1_gateway: document.getElementById("eth1_gw").value.trim(),
     apply_now: document.getElementById("apply_now").checked
   };
-  const j = await api("/api/system/network", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)});
+
+  const j = await api("/api/system/network", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(payload)
+  });
+
   document.getElementById("net_status").textContent = "ok";
   if(j.applied && j.applied.length){
     alert("Applied:\\n" + JSON.stringify(j.applied, null, 2));

@@ -1,33 +1,27 @@
 import json
 import os
-from dataclasses import dataclass, asdict
-from typing import Optional
+from dataclasses import dataclass
 
 DEFAULT_CFG_PATH = "/etc/mas004_rpi_databridge/config.json"
-
 
 @dataclass
 class Settings:
     # Storage
     db_path: str = "/var/lib/mas004_rpi_databridge/databridge.db"
 
-    # Web UI / API
+    # Web UI
     webui_host: str = "0.0.0.0"
     webui_port: int = 8080
+    webui_https: bool = False
+    webui_ssl_certfile: str = "/etc/mas004_rpi_databridge/certs/raspi.crt"
+    webui_ssl_keyfile: str = "/etc/mas004_rpi_databridge/certs/raspi.key"
 
-    # Network (display + optional apply via UI)
+    # Interface labels (Info)
     eth0_ip: str = ""
-    eth0_subnet: str = ""     # CIDR prefix as string or "255.255.255.0" (UI will normalize)
-    eth0_gateway: str = ""
-
     eth1_ip: str = ""
-    eth1_subnet: str = ""
-    eth1_gateway: str = ""
+    eth0_source_ip: str = ""  # outgoing source bind for HttpClient (optional)
 
-    # Outgoing source binding (requests)
-    eth0_source_ip: str = ""
-
-    # Mikrotom peer
+    # Peer (Mikrotom)
     peer_base_url: str = "http://127.0.0.1:9090"
     peer_watchdog_host: str = "127.0.0.1"
     peer_health_path: str = "/health"
@@ -45,38 +39,26 @@ class Settings:
     retry_base_s: float = 1.0
     retry_cap_s: float = 60.0
 
-    # Auth
+    # UI/API auth
     ui_token: str = "change-me"
     shared_secret: str = ""
 
-    # Device endpoints (future real integration; now used by UI + routing stubs)
-    esp_host: str = "192.168.2.10"
-    esp_port: int = 5000
-
-    vj3350_host: str = "192.168.2.20"
-    vj3350_port: int = 20000
-
-    vj6530_host: str = "192.168.2.30"
-    vj6530_port: int = 3007
-
-    @staticmethod
-    def load(path: str = DEFAULT_CFG_PATH) -> "Settings":
+    @classmethod
+    def load(cls, path: str = DEFAULT_CFG_PATH) -> "Settings":
         if not os.path.exists(path):
-            # Ensure dir exists
             os.makedirs(os.path.dirname(path), exist_ok=True)
-            s = Settings()
-            s.save(path)
-            return s
-
+            cfg = cls()
+            cfg.save(path)
+            return cfg
         with open(path, "r", encoding="utf-8") as f:
-            d = json.load(f) or {}
-        s = Settings()
-        for k, v in d.items():
-            if hasattr(s, k):
-                setattr(s, k, v)
-        return s
+            data = json.load(f) or {}
+        cfg = cls()
+        for k, v in data.items():
+            if hasattr(cfg, k):
+                setattr(cfg, k, v)
+        return cfg
 
     def save(self, path: str = DEFAULT_CFG_PATH):
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
-            json.dump(asdict(self), f, indent=2, sort_keys=False)
+            json.dump(self.__dict__, f, indent=2, sort_keys=False)
