@@ -337,13 +337,8 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
     def log_channels(x_token: Optional[str] = Header(default=None)):
         cfg2 = Settings.load(cfg_path)
         require_token(x_token, cfg2)
-
-        defaults = ["all", "raspi", "esp-plc", "vj3350", "vj6530"]
-        db_ch = logs.list_channels() or []
-        # defaults immer zuerst, danach zusätzliche aus DB (ohne Duplikate)
-        merged = defaults + [c for c in db_ch if c not in defaults]
-
-        return {"ok": True, "channels": merged}
+        # ALWAYS include fixed channels (incl. "all"), even if no logs exist yet
+        return {"ok": True, "channels": logs.list_channels()}
 
     @app.get("/api/ui/logs")
     def get_logs(
@@ -1204,25 +1199,37 @@ async function loadChannels(){
   const j = await api("/api/ui/logs/channels");
   const sel = document.getElementById("logch");
   sel.innerHTML = "";
+
   for(const ch of j.channels){
     const o = document.createElement("option");
     o.value = ch; o.textContent = ch;
     sel.appendChild(o);
   }
+
+  // Prefer raspi as default if present (more useful than "all")
+  const preferred = ["raspi","all"];
+  for(const p of preferred){
+    const opt = Array.from(sel.options).find(o => o.value === p);
+    if(opt){ sel.value = p; return; }
+  }
   if(!sel.value && j.channels.length) sel.value = j.channels[0];
 }
+
 async function loadLogs(){
   document.getElementById("log_status").textContent = "loading...";
   const ch = document.getElementById("logch").value;
+
   const j = await api(`/api/ui/logs?channel=${encodeURIComponent(ch)}&limit=400`);
+
   const showCh = (ch === "all");
   const lines = j.items.map(it => {
     const d = new Date(it.ts*1000);
     const t = d.toISOString().replace('T',' ').replace('Z','');
     const dir = String(it.direction||"").toUpperCase();
-    const prefix = showCh ? (`[${it.channel||"?"}] `) : "";
+    const prefix = showCh ? (`${it.channel||""} `) : "";
     return `[${t}] ${prefix}${dir}  ${it.message}`;
   }).join("\n");
+
   document.getElementById("logview").textContent = lines;
   document.getElementById("log_status").textContent = "ok";
 }

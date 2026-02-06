@@ -1,4 +1,3 @@
-# mas004_rpi_databridge/watchdog.py
 import time
 from typing import Optional
 
@@ -25,18 +24,32 @@ class Watchdog:
 
         self._fail = 0
         self.is_up = True
+        self._next_check_ts = 0.0
 
-        # Rate limit: nur alle interval_s wirklich prüfen
-        self._next_check_ts = 0.0  # 0 => beim ersten tick() sofort prüfen
+        self._client = httpx.Client(timeout=self.timeout_s, verify=self.tls_verify)
+
+    def _ping_ok(self) -> bool:
+        try:
+            r = ping(self.host, timeout=self.timeout_s, unit="s")
+            return r is not None
+        except Exception:
+            return False
+
+    def _health_ok(self) -> bool:
+        if not self.health_url:
+            return True
+        try:
+            r = self._client.get(self.health_url)
+            return 200 <= r.status_code < 300
+        except Exception:
+            return False
 
     def tick(self) -> bool:
         now = time.time()
-
-        # Wenn wir zu früh dran sind: alten Status zurückgeben, keine neuen Requests
         if now < self._next_check_ts:
+            # do NOT spam; return last state
             return self.is_up
 
-        # Nächster erlaubter Check-Zeitpunkt
         self._next_check_ts = now + self.interval_s
 
         ok = self._ping_ok()
@@ -46,20 +59,3 @@ class Watchdog:
         self._fail = 0 if ok else (self._fail + 1)
         self.is_up = (self._fail < self.down_after)
         return self.is_up
-
-    def _ping_ok(self) -> bool:
-        try:
-            # ping() gibt None bei Timeout zurück
-            return ping(self.host, timeout=self.timeout_s, unit="ms") is not None
-        except Exception:
-            return False
-
-    def _health_ok(self) -> bool:
-        if not self.health_url:
-            return True
-        try:
-            with httpx.Client(timeout=self.timeout_s, verify=self.tls_verify) as c:
-                r = c.get(self.health_url)
-                return 200 <= r.status_code < 300
-        except Exception:
-            return False

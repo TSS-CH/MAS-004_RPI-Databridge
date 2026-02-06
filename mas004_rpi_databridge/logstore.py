@@ -3,9 +3,11 @@ from typing import List, Dict, Any
 from mas004_rpi_databridge.db import DB, now_ts
 
 DEFAULT_LOG_DIR = "/var/lib/mas004_rpi_databridge/logs"
+
 # Channels that should ALWAYS exist in the UI dropdown, even if no logs exist yet.
 # "all" is a virtual channel (aggregates all channels).
 DEFAULT_LOG_CHANNELS = ["all", "raspi", "esp-plc", "vj3350", "vj6530"]
+
 
 class LogStore:
     def __init__(self, db: DB, log_dir: str = DEFAULT_LOG_DIR):
@@ -15,23 +17,24 @@ class LogStore:
 
     def log(self, channel: str, direction: str, message: str):
         ts = now_ts()
+
         # DB
         with self.db._conn() as c:
             c.execute(
                 "INSERT INTO logs(ts, channel, direction, message) VALUES (?,?,?,?)",
-                (ts, channel, direction, message)
+                (ts, channel, direction, message),
             )
-            # Retention: pro Channel nur die letzten ~5000 Einträge
+            # Retention: keep last ~5000 per channel
             c.execute(
                 """DELETE FROM logs
                    WHERE channel=?
                      AND id NOT IN (
                        SELECT id FROM logs WHERE channel=? ORDER BY id DESC LIMIT 5000
                      )""",
-                (channel, channel)
+                (channel, channel),
             )
 
-        # Datei
+        # File
         fn = os.path.join(self.log_dir, f"{channel}.log")
         line = f"{ts:.3f}\t{direction.upper()}\t{message}\n"
         try:
@@ -46,7 +49,7 @@ class LogStore:
             if channel == "all":
                 rows = c.execute(
                     "SELECT ts, channel, direction, message FROM logs ORDER BY ts DESC LIMIT ?",
-                    (limit,)
+                    (limit,),
                 ).fetchall()
                 # newest first -> return oldest first
                 return [
@@ -56,13 +59,13 @@ class LogStore:
             else:
                 rows = c.execute(
                     "SELECT ts, direction, message FROM logs WHERE channel=? ORDER BY ts DESC LIMIT ?",
-                    (channel, limit)
+                    (channel, limit),
                 ).fetchall()
                 return [{"ts": r[0], "direction": r[1], "message": r[2]} for r in rows[::-1]]
 
     def read_logfile(self, channel: str, max_bytes: int = 500_000) -> str:
         if channel == "all":
-            # Aggregated view from DB (sauber, unabhängig von Files)
+            # Aggregated view from DB (independent from files)
             items = self.list_logs("all", limit=2000)
             lines = []
             for it in items:
@@ -72,7 +75,6 @@ class LogStore:
                 msg = str(it.get("message", ""))
                 lines.append(f"{ts:.3f}\t{ch}\t{direction}\t{msg}")
             txt = "\n".join(lines) + ("\n" if lines else "")
-            # max_bytes anwenden
             b = txt.encode("utf-8", errors="replace")
             if len(b) > max_bytes:
                 b = b[-max_bytes:]
@@ -93,7 +95,7 @@ class LogStore:
             with self.db._conn() as c:
                 c.execute("DELETE FROM logs")
 
-            # file clear all (*.log)
+            # File clear all
             try:
                 for fn in os.listdir(self.log_dir):
                     if fn.endswith(".log"):
@@ -106,31 +108,37 @@ class LogStore:
 
             return {"ok": True}
 
-        # DB clear (single channel)
+        # DB clear one
         with self.db._conn() as c:
             c.execute("DELETE FROM logs WHERE channel=?", (channel,))
 
-        # file clear (single channel)
+        # File clear one
         fn = os.path.join(self.log_dir, f"{channel}.log")
         try:
             if os.path.exists(fn):
                 os.remove(fn)
         except Exception:
             pass
-
         return {"ok": True}
 
     def list_channels(self) -> List[str]:
-        # channels from DB + files
-        ch = set()
+        # channels from DB + files + defaults
+        ch = set(DEFAULT_LOG_CHANNELS)
+
         with self.db._conn() as c:
             rows = c.execute("SELECT DISTINCT channel FROM logs").fetchall()
             for r in rows:
-                ch.add(str(r[0]))
+                if r and r[0] is not None:
+                    ch.add(str(r[0]))
+
         try:
             for fn in os.listdir(self.log_dir):
                 if fn.endswith(".log"):
                     ch.add(fn[:-4])
         except Exception:
             pass
-        return sorted(ch)
+
+        # Ensure defaults first, rest sorted
+        fixed = [x for x in DEFAULT_LOG_CHANNELS if x in ch]
+        rest = sorted([x for x in ch if x not in DEFAULT_LOG_CHANNELS])
+        return fixed + rest
