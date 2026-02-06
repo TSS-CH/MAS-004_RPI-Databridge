@@ -433,23 +433,53 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
   </table>
 
 <script>
-function getToken(){ return localStorage.getItem("mas004_ui_token") || ""; }
-function saveToken(){
-  localStorage.setItem("mas004_ui_token", document.getElementById("token").value.trim());
-  showTok();
+const LS_KEY = "mas004_ui_token";
+
+function lsGet(k){
+  try { return localStorage.getItem(k) || ""; } catch(e){ return ""; }
 }
+function lsSet(k,v){
+  try { localStorage.setItem(k, v); } catch(e){}
+}
+
+function cookieGet(name){
+  const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()\\[\\]\\\\\\/\\+^])/g, '\\\\$1') + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : "";
+}
+function cookieSet(name, val){
+  document.cookie = `${name}=${encodeURIComponent(val)}; Path=/; Max-Age=${60*60*24*365}; SameSite=Lax`;
+}
+
+function getToken(){
+  return lsGet(LS_KEY) || cookieGet(LS_KEY) || "";
+}
+
+function saveToken(){
+  const v = document.getElementById("token").value.trim();
+  lsSet(LS_KEY, v);
+  cookieSet(LS_KEY, v);
+  showTok();
+  // nach Save gleich Channels/Logs neu laden (zeigt sofort ob Token ok ist)
+  loadChannels().then(loadLogs).catch(e=>{
+    document.getElementById("log_status").textContent = "ERROR: " + e.message;
+  });
+}
+
 function showTok(){
   const t = getToken();
   document.getElementById("token").value = t;
   document.getElementById("tokstate").textContent = t ? "token ok" : "no token";
 }
+
 async function api(path, opt={}){
   opt.headers = opt.headers || {};
   const t = getToken();
   if(t) opt.headers["X-Token"] = t;
+
   const r = await fetch(path, opt);
   const txt = await r.text();
   let j=null; try{ j=JSON.parse(txt); }catch(e){}
+
   if(!r.ok){
     throw new Error((j && j.detail) ? j.detail : ("HTTP "+r.status+" "+txt));
   }
@@ -1171,3 +1201,5 @@ setTab("raspi");
 </script>
 </body></html>
 """
+
+    return app
