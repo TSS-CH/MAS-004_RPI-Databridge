@@ -1,26 +1,36 @@
+# mas004_rpi_databridge/http_client.py
+from __future__ import annotations
+
+from typing import Optional, Dict, Any
 import httpx
-import json
-from typing import Optional
+
 
 class HttpClient:
-    def __init__(self, timeout_s: float, source_ip: Optional[str], verify_tls: bool):
-        self.timeout_s = timeout_s
-        self.source_ip = source_ip
-        self.verify_tls = verify_tls
+    def __init__(self, timeout_s: float = 10.0, source_ip: str = "", verify_tls: bool = True):
+        self.timeout_s = float(timeout_s or 10.0)
+        self.source_ip = (source_ip or "").strip()
+        self.verify_tls = bool(verify_tls)
 
-    def _transport(self) -> httpx.BaseTransport:
-        if not self.source_ip:
-            return httpx.HTTPTransport(retries=0)
-        return httpx.HTTPTransport(retries=0, local_address=(self.source_ip, 0))
+        self._timeout = httpx.Timeout(self.timeout_s)
 
-    def request(self, method: str, url: str, headers: dict, body: Optional[dict]):
-        method = method.upper()
-        with httpx.Client(timeout=self.timeout_s, verify=self.verify_tls, transport=self._transport()) as c:
-            if method == "GET":
-                r = c.get(url, headers=headers)
-            elif method == "POST":
-                r = c.post(url, headers=headers, content=json.dumps(body or {}))
-            else:
-                raise ValueError(f"Unsupported method: {method}")
-            r.raise_for_status()
-            return r.text
+        # Optional: an eth0 IP binden (source address)
+        self._transport = None
+        if self.source_ip:
+            # httpx/httpcore erwartet i.d.R. (host, port)
+            self._transport = httpx.HTTPTransport(local_address=(self.source_ip, 0))
+
+    def request(self, method: str, url: str, headers: Dict[str, str], body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        method = (method or "POST").upper()
+        headers = dict(headers or {})
+
+        # WICHTIG: verify_tls=False => verify=False (self-signed ok)
+        verify = False if not self.verify_tls else True
+
+        with httpx.Client(timeout=self._timeout, verify=verify, transport=self._transport) as c:
+            r = c.request(method, url, headers=headers, json=body)
+
+        # Fehler sauber hochwerfen, damit dein Outbox-Backoff greift
+        if not (200 <= r.status_code < 300):
+            raise RuntimeError(f"HTTP {r.status_code}: {r.text[:400]}")
+
+        return {"status_code": r.status_code, "text": r.text}
