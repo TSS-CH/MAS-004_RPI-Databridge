@@ -337,7 +337,9 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
     def log_channels(x_token: Optional[str] = Header(default=None)):
         cfg2 = Settings.load(cfg_path)
         require_token(x_token, cfg2)
-        return {"ok": True, "channels": logs.list_channels()}
+        default = ['raspi','esp-plc','vj3350','vj6530']
+        ch = list(dict.fromkeys(default + (logs.list_channels() or [])))
+        return {'ok': True, 'channels': ch}
 
     @app.get("/api/ui/logs")
     def get_logs(
@@ -564,17 +566,116 @@ load();
   <meta charset="utf-8"/>
   <title>System Settings</title>
   <style>
-    body{font-family:Arial; margin:20px; max-width:1100px}
-    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-    input{padding:6px; margin:4px}
-    button{padding:7px 10px; cursor:pointer}
-    fieldset{border:1px solid #ddd; margin:12px 0; padding:12px; border-radius:8px}
-    legend{padding:0 6px; color:#333}
-    pre{background:#111; color:#eee; padding:10px; border-radius:10px; overflow:auto; max-height:260px}
-    .muted{color:#666}
-    .pill{padding:2px 6px; border:1px solid #aaa; border-radius:10px; font-size:12px}
-    .bad{outline:2px solid #b00}
-  </style>
+
+  :root{
+    --vj-navy:#003A70;
+    --vj-blue:#005EB8;
+    --vj-red:#E4002B;
+    --bg:#F5F7FA;
+    --card:#FFFFFF;
+    --text:#1D232B;
+    --muted:#5F6B7A;
+    --border:#D8E0EA;
+    --radius:14px;
+    --shadow:0 6px 24px rgba(0,0,0,.08);
+  }
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+  }
+  header{
+    background:linear-gradient(90deg,var(--vj-navy),var(--vj-blue));
+    color:#fff;
+    padding:14px 18px;
+    box-shadow:0 2px 14px rgba(0,0,0,.15);
+    position:sticky;
+    top:0;
+    z-index:10;
+  }
+  header .row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    justify-content:space-between;
+    flex-wrap:wrap;
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .badge{
+    font-size:12px;
+    padding:4px 8px;
+    border:1px solid rgba(255,255,255,.35);
+    border-radius:999px;
+    opacity:.95;
+  }
+  main{padding:18px; max-width:1200px; margin:0 auto;}
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(12,1fr);
+    gap:14px;
+  }
+  .card{
+    grid-column:span 12;
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:16px;
+  }
+  .card h2{margin:0 0 10px 0; font-size:18px;}
+  .sub{color:var(--muted); font-size:13px; margin-top:2px;}
+  .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  label{font-size:12px; color:var(--muted);}
+  input,select,textarea{
+    width:100%;
+    padding:10px 12px;
+    border:1px solid var(--border);
+    border-radius:12px;
+    background:#fff;
+    font-size:14px;
+    outline:none;
+  }
+  textarea{min-height:110px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+  input:focus,select:focus,textarea:focus{border-color:var(--vj-blue); box-shadow:0 0 0 3px rgba(0,94,184,.15);}
+  .btn{
+    appearance:none;
+    border:0;
+    cursor:pointer;
+    padding:10px 14px;
+    border-radius:12px;
+    font-weight:600;
+    font-size:14px;
+  }
+  .btn.primary{background:var(--vj-blue); color:#fff;}
+  .btn.danger{background:var(--vj-red); color:#fff;}
+  .btn.ghost{background:#fff; border:1px solid rgba(255,255,255,.45); color:#fff;}
+  .btn:active{transform:translateY(1px);}
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 10px;
+    border:1px solid var(--border);
+    border-radius:999px;
+    font-size:13px;
+    background:#fff;
+  }
+  .ok{color:#0B7A3B; font-weight:700;}
+  .bad{color:var(--vj-red); font-weight:700;}
+  .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+  .split{display:grid; grid-template-columns:repeat(12,1fr); gap:12px;}
+  .col6{grid-column:span 6;}
+  .col4{grid-column:span 4;}
+  .col8{grid-column:span 8;}
+  @media(max-width:900px){.col6,.col4,.col8{grid-column:span 12;}}
+
+</style>
 </head>
 <body>
   <h2>System Settings</h2>
@@ -885,16 +986,119 @@ reloadAll();
   <meta charset="utf-8"/>
   <title>MAS-004 Test UI</title>
   <style>
-    body{font-family:Arial; margin:20px; max-width:1100px}
-    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-    input{padding:6px; margin:4px}
-    button{padding:7px 10px; cursor:pointer}
-    .tabs button{border:1px solid #aaa; border-radius:10px; background:#f3f3f3}
-    .tabs button.active{background:#ddd}
-    pre{background:#111; color:#eee; padding:10px; border-radius:10px; overflow:auto; max-height:420px}
-    .muted{color:#666}
-    select{padding:6px}
-  </style>
+
+  :root{
+    --vj-navy:#003A70;
+    --vj-blue:#005EB8;
+    --vj-red:#E4002B;
+    --bg:#F5F7FA;
+    --card:#FFFFFF;
+    --text:#1D232B;
+    --muted:#5F6B7A;
+    --border:#D8E0EA;
+    --radius:14px;
+    --shadow:0 6px 24px rgba(0,0,0,.08);
+  }
+  html,body{height:100%;}
+  body{
+    margin:0;
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+  }
+  header{
+    background:linear-gradient(90deg,var(--vj-navy),var(--vj-blue));
+    color:#fff;
+    padding:14px 18px;
+    box-shadow:0 2px 14px rgba(0,0,0,.15);
+    position:sticky;
+    top:0;
+    z-index:10;
+  }
+  header .row{
+    display:flex;
+    align-items:center;
+    gap:14px;
+    justify-content:space-between;
+    flex-wrap:wrap;
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .badge{
+    font-size:12px;
+    padding:4px 8px;
+    border:1px solid rgba(255,255,255,.35);
+    border-radius:999px;
+    opacity:.95;
+  }
+  main{padding:18px; max-width:1200px; margin:0 auto;}
+  .grid{
+    display:grid;
+    grid-template-columns:repeat(12,1fr);
+    gap:14px;
+  }
+  .card{
+    grid-column:span 12;
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:16px;
+  }
+  .card h2{margin:0 0 10px 0; font-size:18px;}
+  .sub{color:var(--muted); font-size:13px; margin-top:2px;}
+  .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  label{font-size:12px; color:var(--muted);}
+  input,select,textarea{
+    width:100%;
+    padding:10px 12px;
+    border:1px solid var(--border);
+    border-radius:12px;
+    background:#fff;
+    font-size:14px;
+    outline:none;
+  }
+  textarea{min-height:110px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+  input:focus,select:focus,textarea:focus{border-color:var(--vj-blue); box-shadow:0 0 0 3px rgba(0,94,184,.15);}
+  .btn{
+    appearance:none;
+    border:0;
+    cursor:pointer;
+    padding:10px 14px;
+    border-radius:12px;
+    font-weight:600;
+    font-size:14px;
+  }
+  .btn.primary{background:var(--vj-blue); color:#fff;}
+  .btn.danger{background:var(--vj-red); color:#fff;}
+  .btn.ghost{background:#fff; border:1px solid rgba(255,255,255,.45); color:#fff;}
+  .btn:active{transform:translateY(1px);}
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 10px;
+    border:1px solid var(--border);
+    border-radius:999px;
+    font-size:13px;
+    background:#fff;
+  }
+  .ok{color:#0B7A3B; font-weight:700;}
+  .bad{color:var(--vj-red); font-weight:700;}
+  .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+  .split{display:grid; grid-template-columns:repeat(12,1fr); gap:12px;}
+  .col6{grid-column:span 6;}
+  .col4{grid-column:span 4;}
+  .col8{grid-column:span 8;}
+  @media(max-width:900px){.col6,.col4,.col8{grid-column:span 12;}}
+
+  pre{white-space:pre-wrap; margin:0;}
+  .logs{max-height:420px; overflow:auto;}
+
+</style>
 </head>
 <body>
   <h2>MAS-004 Test UI</h2>
