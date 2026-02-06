@@ -337,7 +337,6 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
     def log_channels(x_token: Optional[str] = Header(default=None)):
         cfg2 = Settings.load(cfg_path)
         require_token(x_token, cfg2)
-        # ALWAYS include fixed channels (incl. "all"), even if no logs exist yet
         return {"ok": True, "channels": logs.list_channels()}
 
     @app.get("/api/ui/logs")
@@ -975,288 +974,242 @@ reloadAll();
     # -----------------------------
     # Test UI (Clear output + log handling)
     # -----------------------------
-    @app.get("/ui/test", response_class=HTMLResponse)
-    def ui_test():
-        # Minimal invasive: nur Buttons + Logs hinzufügen.
-        return """
+@app.get("/ui/test", response_class=HTMLResponse)
+def ui_test():
+    return """
 <!doctype html>
 <html>
 <head>
   <meta charset="utf-8"/>
   <title>MAS-004 Test UI</title>
   <style>
-
-  :root{
-    --vj-navy:#003A70;
-    --vj-blue:#005EB8;
-    --vj-red:#E4002B;
-    --bg:#F5F7FA;
-    --card:#FFFFFF;
-    --text:#1D232B;
-    --muted:#5F6B7A;
-    --border:#D8E0EA;
-    --radius:14px;
-    --shadow:0 6px 24px rgba(0,0,0,.08);
-  }
-  html,body{height:100%;}
-  body{
-    margin:0;
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
-    background:var(--bg);
-    color:var(--text);
-  }
-  header{
-    background:linear-gradient(90deg,var(--vj-navy),var(--vj-blue));
-    color:#fff;
-    padding:14px 18px;
-    box-shadow:0 2px 14px rgba(0,0,0,.15);
-    position:sticky;
-    top:0;
-    z-index:10;
-  }
-  header .row{
-    display:flex;
-    align-items:center;
-    gap:14px;
-    justify-content:space-between;
-    flex-wrap:wrap;
-  }
-  .brand{
-    display:flex;
-    align-items:center;
-    gap:12px;
-  }
-  .badge{
-    font-size:12px;
-    padding:4px 8px;
-    border:1px solid rgba(255,255,255,.35);
-    border-radius:999px;
-    opacity:.95;
-  }
-  main{padding:18px; max-width:1200px; margin:0 auto;}
-  .grid{
-    display:grid;
-    grid-template-columns:repeat(12,1fr);
-    gap:14px;
-  }
-  .card{
-    grid-column:span 12;
-    background:var(--card);
-    border:1px solid var(--border);
-    border-radius:var(--radius);
-    box-shadow:var(--shadow);
-    padding:16px;
-  }
-  .card h2{margin:0 0 10px 0; font-size:18px;}
-  .sub{color:var(--muted); font-size:13px; margin-top:2px;}
-  .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
-  label{font-size:12px; color:var(--muted);}
-  input,select,textarea{
-    width:100%;
-    padding:10px 12px;
-    border:1px solid var(--border);
-    border-radius:12px;
-    background:#fff;
-    font-size:14px;
-    outline:none;
-  }
-  textarea{min-height:110px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
-  input:focus,select:focus,textarea:focus{border-color:var(--vj-blue); box-shadow:0 0 0 3px rgba(0,94,184,.15);}
-  .btn{
-    appearance:none;
-    border:0;
-    cursor:pointer;
-    padding:10px 14px;
-    border-radius:12px;
-    font-weight:600;
-    font-size:14px;
-  }
-  .btn.primary{background:var(--vj-blue); color:#fff;}
-  .btn.danger{background:var(--vj-red); color:#fff;}
-  .btn.ghost{background:#fff; border:1px solid rgba(255,255,255,.45); color:#fff;}
-  .btn:active{transform:translateY(1px);}
-  .pill{
-    display:inline-flex;
-    align-items:center;
-    gap:8px;
-    padding:8px 10px;
-    border:1px solid var(--border);
-    border-radius:999px;
-    font-size:13px;
-    background:#fff;
-  }
-  .ok{color:#0B7A3B; font-weight:700;}
-  .bad{color:var(--vj-red); font-weight:700;}
-  .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
-  .split{display:grid; grid-template-columns:repeat(12,1fr); gap:12px;}
-  .col6{grid-column:span 6;}
-  .col4{grid-column:span 4;}
-  .col8{grid-column:span 8;}
-  @media(max-width:900px){.col6,.col4,.col8{grid-column:span 12;}}
-
-  pre{white-space:pre-wrap; margin:0;}
-  .logs{max-height:420px; overflow:auto;}
-
-</style>
+    body{font-family:Arial; margin:20px; max-width:1100px}
+    .muted{color:#666}
+    .pill{display:inline-block; padding:2px 8px; border:1px solid #aaa; border-radius:999px; font-size:12px}
+    input{padding:8px; border:1px solid #bbb; border-radius:6px}
+    button{padding:7px 10px}
+    pre{background:#f7f7f7; border:1px solid #ddd; padding:10px; border-radius:6px; white-space:pre-wrap}
+    select{padding:7px}
+    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  </style>
 </head>
 <body>
-  <h2>MAS-004 Test UI</h2>
-  <p class="muted">Tabs simulieren Komponente. Send aus ESP/LASER/TTO läuft über Raspi -> Mikrotom.</p>
 
-  <div class="row">
-    <label>UI Token:</label>
-    <input id="token" style="width:420px" placeholder="MAS004-..."/>
-    <button onclick="saveToken()">Save</button>
-    <span id="tokstate" class="muted"></span>
-    <a href="/" style="margin-left:auto">Home</a>
-  </div>
+<h2>MAS-004 Test UI</h2>
+<p class="muted">Tabs simulieren Komponente. Send läuft über Raspi -&gt; Mikrotom.</p>
 
-  <div class="tabs row" style="margin-top:10px">
-    <button id="tab_raspi" onclick="setTab('raspi')">RASPI</button>
-    <button id="tab_esp" onclick="setTab('esp')">ESP-PLC</button>
-    <button id="tab_laser" onclick="setTab('laser')">VJ3350</button>
-    <button id="tab_tto" onclick="setTab('tto')">VJ6530</button>
-  </div>
+<div class="row">
+  <span class="pill" id="jsstate">JS: (not running)</span>
+  <span class="pill" id="tokstate">token: ?</span>
+  <span class="pill" id="status"></span>
+</div>
 
-  <div class="row" style="margin-top:10px">
-    <input id="cmd" style="width:520px" placeholder="z.B. TTP00002=?  oder  TTE1000=1  oder  MAS0026=20"/>
-    <button onclick="send()">Send</button>
-    <button onclick="clearOut()">Clear Output</button>
-    <span id="status" class="muted"></span>
-  </div>
+<hr/>
 
-  <h3>Output</h3>
-  <pre id="out"></pre>
+<div class="row">
+  <label>UI Token:</label>
+  <input id="token" style="width:420px" placeholder="MAS004-..."/>
+  <button type="button" onclick="saveToken()">Save</button>
+  <button type="button" onclick="clearToken()">Clear</button>
+</div>
 
-  <h3>Logs</h3>
-  <div class="row">
-    <label>Channel:</label>
-    <select id="logch"></select>
-    <button onclick="loadLogs()">Reload Logs</button>
-    <button onclick="downloadLog()">Download .log</button>
-    <button onclick="clearLog()">Clear Log</button>
-    <span id="log_status" class="muted"></span>
-  </div>
-  <pre id="logview"></pre>
+<div class="row" style="margin-top:10px">
+  <button type="button" onclick="setTab('raspi')">RASPI</button>
+  <button type="button" onclick="setTab('esp-plc')">ESP-PLC</button>
+  <button type="button" onclick="setTab('vj3350')">VJ3350</button>
+  <button type="button" onclick="setTab('vj6530')">VJ6530</button>
+  <span class="muted">Tab:</span> <b id="tabname"></b>
+</div>
+
+<div class="row" style="margin-top:10px">
+  <input id="cmd" style="width:520px" placeholder="z.B. TTP00002=?  oder  MAS0026=20"/>
+  <button type="button" onclick="send()">Send</button>
+  <button type="button" onclick="clearOut()">Clear Output</button>
+</div>
+
+<h3>Output</h3>
+<pre id="out"></pre>
+
+<h3>Logs</h3>
+<div class="row">
+  <label>Channel:</label>
+  <select id="logch"></select>
+  <button type="button" onclick="loadChannels()">Reload Channels</button>
+  <button type="button" onclick="loadLogs()">Reload Logs</button>
+  <button type="button" onclick="downloadLog()">Download .log</button>
+  <button type="button" onclick="clearLog()">Clear Log</button>
+  <span class="muted" id="log_status"></span>
+</div>
+<pre id="logview"></pre>
 
 <script>
 let currentTab = "raspi";
 
-function getToken(){ return localStorage.getItem("mas004_ui_token") || ""; }
-function saveToken(){
-  localStorage.setItem("mas004_ui_token", document.getElementById("token").value.trim());
-  showTok();
+function setStatus(msg){ document.getElementById("status").textContent = msg || ""; }
+
+function getToken(){
+  try { return localStorage.getItem("mas004_ui_token") || ""; }
+  catch(e){ return ""; }
 }
+
 function showTok(){
   const t = getToken();
   document.getElementById("token").value = t;
-  document.getElementById("tokstate").textContent = t ? "token ok" : "no token";
+  document.getElementById("tokstate").textContent = t ? "token: ok" : "token: (empty)";
 }
+
+function saveToken(){
+  try{
+    const t = (document.getElementById("token").value || "").trim();
+    localStorage.setItem("mas004_ui_token", t);
+    setStatus("saved token to localStorage");
+  }catch(e){
+    setStatus("ERROR saving token: " + e);
+  }
+  showTok();
+}
+
+function clearToken(){
+  try{
+    localStorage.removeItem("mas004_ui_token");
+    setStatus("cleared token");
+  }catch(e){
+    setStatus("ERROR clearing token: " + e);
+  }
+  showTok();
+}
+
 async function api(path, opt={}){
   opt.headers = opt.headers || {};
   const t = getToken();
   if(t) opt.headers["X-Token"] = t;
+
   const r = await fetch(path, opt);
   const txt = await r.text();
   let j=null; try{ j=JSON.parse(txt); }catch(e){}
   if(!r.ok){
-    throw new Error((j && j.detail) ? j.detail : ("HTTP "+r.status+" "+txt));
+    const msg = (j && j.detail) ? j.detail : ("HTTP "+r.status+" "+txt);
+    throw new Error(msg);
   }
   return j;
 }
+
 function ts(){ return new Date().toISOString().replace('T',' ').replace('Z',''); }
+
 function logLine(s){
   const out = document.getElementById("out");
   out.textContent += s + "\\n";
-  out.scrollTop = out.scrollHeight;
 }
+
 function clearOut(){
   document.getElementById("out").textContent = "";
 }
+
 function setTab(t){
   currentTab = t;
-  for(const id of ["raspi","esp","laser","tto"]){
-    document.getElementById("tab_"+id).classList.toggle("active", id===t);
-  }
+  document.getElementById("tabname").textContent = currentTab;
 }
+
 async function send(){
-  const cmd = document.getElementById("cmd").value.trim();
+  const cmd = (document.getElementById("cmd").value || "").trim();
   if(!cmd) return;
-  document.getElementById("status").textContent = "sending...";
-  // Wir enqueue'n eine Message an Mikrotom (über Raspi Outbox) oder nutzen deinen existierenden Endpoint,
-  // hier simpel: outbox/enqueue -> Mikrotom inbox (dein Router reagiert auf Mikrotom->Raspi; fürs Testen reicht die Simulation).
-  const payload = {
-    method: "POST",
-    path: "/api/inbox",
-    headers: {},
-    body: { msg: cmd, source: currentTab }
-  };
-  const j = await api("/api/outbox/enqueue", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)});
-  logLine(`[${ts()}] OUT  manual -> ${currentTab}: ${cmd}  (idem=${j.idempotency_key})`);
-  document.getElementById("status").textContent = "ok";
+
+  setStatus("sending...");
+  try{
+    const payload = {
+      method: "POST",
+      path: "/api/inbox",
+      headers: {},
+      body: { msg: cmd, source: currentTab }
+    };
+    const j = await api("/api/outbox/enqueue", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(payload)
+    });
+    logLine(`[${ts()}] OUT manual -> ${currentTab}: ${cmd} (idem=${j.idempotency_key})`);
+    setStatus("ok");
+    await loadLogs();
+  }catch(e){
+    setStatus("ERROR: " + e.message);
+  }
 }
+
 async function loadChannels(){
-  const j = await api("/api/ui/logs/channels");
-  const sel = document.getElementById("logch");
-  sel.innerHTML = "";
-
-  for(const ch of j.channels){
-    const o = document.createElement("option");
-    o.value = ch; o.textContent = ch;
-    sel.appendChild(o);
+  document.getElementById("log_status").textContent = "loading channels...";
+  try{
+    const j = await api("/api/ui/logs/channels");
+    const sel = document.getElementById("logch");
+    sel.innerHTML = "";
+    for(const ch of j.channels){
+      const o = document.createElement("option");
+      o.value = ch; o.textContent = ch;
+      sel.appendChild(o);
+    }
+    if(j.channels.includes("all")) sel.value = "all";
+    document.getElementById("log_status").textContent = "ok";
+  }catch(e){
+    document.getElementById("log_status").textContent = "ERROR: " + e.message;
   }
-
-  // Prefer raspi as default if present (more useful than "all")
-  const preferred = ["raspi","all"];
-  for(const p of preferred){
-    const opt = Array.from(sel.options).find(o => o.value === p);
-    if(opt){ sel.value = p; return; }
-  }
-  if(!sel.value && j.channels.length) sel.value = j.channels[0];
 }
 
 async function loadLogs(){
-  document.getElementById("log_status").textContent = "loading...";
-  const ch = document.getElementById("logch").value;
+  document.getElementById("log_status").textContent = "loading logs...";
+  try{
+    const ch = document.getElementById("logch").value || "all";
+    const j = await api(`/api/ui/logs?channel=${encodeURIComponent(ch)}&limit=400`);
 
-  const j = await api(`/api/ui/logs?channel=${encodeURIComponent(ch)}&limit=400`);
+    const showCh = (ch === "all");
+    const lines = j.items.map(it => {
+      const d = new Date(it.ts*1000);
+      const t = d.toISOString().replace('T',' ').replace('Z','');
+      const dir = String(it.direction||"").toUpperCase();
+      const prefix = showCh ? (`${it.channel||""} `) : "";
+      return `[${t}] ${prefix}${dir}  ${it.message}`;
+    }).join("\\n");
 
-  const showCh = (ch === "all");
-  const lines = j.items.map(it => {
-    const d = new Date(it.ts*1000);
-    const t = d.toISOString().replace('T',' ').replace('Z','');
-    const dir = String(it.direction||"").toUpperCase();
-    const prefix = showCh ? (`${it.channel||""} `) : "";
-    return `[${t}] ${prefix}${dir}  ${it.message}`;
-  }).join("\n");
-
-  document.getElementById("logview").textContent = lines;
-  document.getElementById("log_status").textContent = "ok";
+    document.getElementById("logview").textContent = lines;
+    document.getElementById("log_status").textContent = "ok";
+  }catch(e){
+    document.getElementById("log_status").textContent = "ERROR: " + e.message;
+  }
 }
+
 async function clearLog(){
-  const ch = document.getElementById("logch").value;
+  const ch = document.getElementById("logch").value || "all";
   if(!confirm("Log löschen: "+ch+" ?")) return;
-  await api(`/api/ui/logs/clear?channel=${encodeURIComponent(ch)}`, {method:"POST"});
-  await loadLogs();
-}
-async function downloadLog(){
-  const ch = document.getElementById("logch").value;
-  const t = getToken();
-  const r = await fetch(`/api/ui/logs/download?channel=${encodeURIComponent(ch)}`, {headers: t?{"X-Token":t}:{}} );
-  if(!r.ok){ alert(await r.text()); return; }
-  const blob = await r.blob();
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = ch + ".log";
-  a.click();
-  URL.revokeObjectURL(a.href);
+  try{
+    await api(`/api/ui/logs/clear?channel=${encodeURIComponent(ch)}`, {method:"POST"});
+    await loadLogs();
+  }catch(e){
+    document.getElementById("log_status").textContent = "ERROR: " + e.message;
+  }
 }
 
-showTok();
+async function downloadLog(){
+  const ch = document.getElementById("logch").value || "all";
+  try{
+    const t = getToken();
+    const r = await fetch(`/api/ui/logs/download?channel=${encodeURIComponent(ch)}`, {headers: t?{"X-Token":t}:{}} );
+    if(!r.ok){ alert(await r.text()); return; }
+    const blob = await r.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = ch + ".log";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }catch(e){
+    alert("Download Fehler: " + e);
+  }
+}
+
+// JS running marker:
+document.getElementById("jsstate").textContent = "JS: OK";
 setTab("raspi");
+showTok();
 loadChannels().then(loadLogs);
 </script>
-</body></html>
-        """
 
-    return app
+</body>
+</html>
+    """

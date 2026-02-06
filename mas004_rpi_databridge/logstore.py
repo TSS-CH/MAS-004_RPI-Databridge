@@ -24,7 +24,7 @@ class LogStore:
                 "INSERT INTO logs(ts, channel, direction, message) VALUES (?,?,?,?)",
                 (ts, channel, direction, message),
             )
-            # Retention: keep last ~5000 per channel
+            # Retention: pro Channel nur die letzten ~5000 Einträge
             c.execute(
                 """DELETE FROM logs
                    WHERE channel=?
@@ -34,7 +34,7 @@ class LogStore:
                 (channel, channel),
             )
 
-        # File
+        # Datei
         fn = os.path.join(self.log_dir, f"{channel}.log")
         line = f"{ts:.3f}\t{direction.upper()}\t{message}\n"
         try:
@@ -45,6 +45,7 @@ class LogStore:
 
     def list_logs(self, channel: str, limit: int = 200) -> List[Dict[str, Any]]:
         limit = max(1, min(int(limit), 2000))
+
         with self.db._conn() as c:
             if channel == "all":
                 rows = c.execute(
@@ -56,25 +57,27 @@ class LogStore:
                     {"ts": r[0], "channel": r[1], "direction": r[2], "message": r[3]}
                     for r in rows[::-1]
                 ]
-            else:
-                rows = c.execute(
-                    "SELECT ts, direction, message FROM logs WHERE channel=? ORDER BY ts DESC LIMIT ?",
-                    (channel, limit),
-                ).fetchall()
-                return [{"ts": r[0], "direction": r[1], "message": r[2]} for r in rows[::-1]]
+
+            rows = c.execute(
+                "SELECT ts, direction, message FROM logs WHERE channel=? ORDER BY ts DESC LIMIT ?",
+                (channel, limit),
+            ).fetchall()
+
+        return [{"ts": r[0], "direction": r[1], "message": r[2]} for r in rows[::-1]]
 
     def read_logfile(self, channel: str, max_bytes: int = 500_000) -> str:
         if channel == "all":
-            # Aggregated view from DB (independent from files)
+            # Aggregated view from DB (unabhängig von Files)
             items = self.list_logs("all", limit=2000)
             lines = []
             for it in items:
                 ts = float(it.get("ts") or 0.0)
-                ch = it.get("channel", "")
+                ch = str(it.get("channel", ""))
                 direction = str(it.get("direction", "")).upper()
                 msg = str(it.get("message", ""))
                 lines.append(f"{ts:.3f}\t{ch}\t{direction}\t{msg}")
             txt = "\n".join(lines) + ("\n" if lines else "")
+
             b = txt.encode("utf-8", errors="replace")
             if len(b) > max_bytes:
                 b = b[-max_bytes:]
@@ -95,7 +98,7 @@ class LogStore:
             with self.db._conn() as c:
                 c.execute("DELETE FROM logs")
 
-            # File clear all
+            # file clear all (*.log)
             try:
                 for fn in os.listdir(self.log_dir):
                     if fn.endswith(".log"):
@@ -108,11 +111,11 @@ class LogStore:
 
             return {"ok": True}
 
-        # DB clear one
+        # DB clear
         with self.db._conn() as c:
             c.execute("DELETE FROM logs WHERE channel=?", (channel,))
 
-        # File clear one
+        # file clear
         fn = os.path.join(self.log_dir, f"{channel}.log")
         try:
             if os.path.exists(fn):
@@ -122,14 +125,14 @@ class LogStore:
         return {"ok": True}
 
     def list_channels(self) -> List[str]:
-        # channels from DB + files + defaults
+        # Always include defaults
         ch = set(DEFAULT_LOG_CHANNELS)
 
+        # channels from DB + files
         with self.db._conn() as c:
             rows = c.execute("SELECT DISTINCT channel FROM logs").fetchall()
             for r in rows:
-                if r and r[0] is not None:
-                    ch.add(str(r[0]))
+                ch.add(str(r[0]))
 
         try:
             for fn in os.listdir(self.log_dir):
@@ -138,7 +141,10 @@ class LogStore:
         except Exception:
             pass
 
-        # Ensure defaults first, rest sorted
-        fixed = [x for x in DEFAULT_LOG_CHANNELS if x in ch]
-        rest = sorted([x for x in ch if x not in DEFAULT_LOG_CHANNELS])
-        return fixed + rest
+        # Keep default order first, then extras sorted
+        out = []
+        for d in DEFAULT_LOG_CHANNELS:
+            if d in ch:
+                out.append(d)
+        extras = sorted([x for x in ch if x not in DEFAULT_LOG_CHANNELS])
+        return out + extras
