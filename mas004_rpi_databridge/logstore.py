@@ -43,14 +43,41 @@ class LogStore:
     def list_logs(self, channel: str, limit: int = 200) -> List[Dict[str, Any]]:
         limit = max(1, min(int(limit), 2000))
         with self.db._conn() as c:
-            rows = c.execute(
-                "SELECT ts, direction, message FROM logs WHERE channel=? ORDER BY ts DESC LIMIT ?",
-                (channel, limit)
-            ).fetchall()
-        # newest first -> return oldest first
-        return [{"ts": r[0], "direction": r[1], "message": r[2]} for r in rows[::-1]]
+            if channel == "all":
+                rows = c.execute(
+                    "SELECT ts, channel, direction, message FROM logs ORDER BY ts DESC LIMIT ?",
+                    (limit,)
+                ).fetchall()
+                # newest first -> return oldest first
+                return [
+                    {"ts": r[0], "channel": r[1], "direction": r[2], "message": r[3]}
+                    for r in rows[::-1]
+                ]
+            else:
+                rows = c.execute(
+                    "SELECT ts, direction, message FROM logs WHERE channel=? ORDER BY ts DESC LIMIT ?",
+                    (channel, limit)
+                ).fetchall()
+                return [{"ts": r[0], "direction": r[1], "message": r[2]} for r in rows[::-1]]
 
     def read_logfile(self, channel: str, max_bytes: int = 500_000) -> str:
+        if channel == "all":
+            # Aggregated view from DB (sauber, unabhängig von Files)
+            items = self.list_logs("all", limit=2000)
+            lines = []
+            for it in items:
+                ts = float(it.get("ts") or 0.0)
+                ch = it.get("channel", "")
+                direction = str(it.get("direction", "")).upper()
+                msg = str(it.get("message", ""))
+                lines.append(f"{ts:.3f}\t{ch}\t{direction}\t{msg}")
+            txt = "\n".join(lines) + ("\n" if lines else "")
+            # max_bytes anwenden
+            b = txt.encode("utf-8", errors="replace")
+            if len(b) > max_bytes:
+                b = b[-max_bytes:]
+            return b.decode("utf-8", errors="replace")
+
         fn = os.path.join(self.log_dir, f"{channel}.log")
         if not os.path.exists(fn):
             return ""
@@ -61,17 +88,36 @@ class LogStore:
         return data.decode("utf-8", errors="replace")
 
     def clear_channel(self, channel: str) -> Dict[str, Any]:
-        # DB clear
+        if channel == "all":
+            # DB clear all
+            with self.db._conn() as c:
+                c.execute("DELETE FROM logs")
+
+            # file clear all (*.log)
+            try:
+                for fn in os.listdir(self.log_dir):
+                    if fn.endswith(".log"):
+                        try:
+                            os.remove(os.path.join(self.log_dir, fn))
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
+            return {"ok": True}
+
+        # DB clear (single channel)
         with self.db._conn() as c:
             c.execute("DELETE FROM logs WHERE channel=?", (channel,))
 
-        # file clear
+        # file clear (single channel)
         fn = os.path.join(self.log_dir, f"{channel}.log")
         try:
             if os.path.exists(fn):
                 os.remove(fn)
         except Exception:
             pass
+
         return {"ok": True}
 
     def list_channels(self) -> List[str]:

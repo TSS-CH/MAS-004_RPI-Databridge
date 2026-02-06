@@ -337,9 +337,13 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
     def log_channels(x_token: Optional[str] = Header(default=None)):
         cfg2 = Settings.load(cfg_path)
         require_token(x_token, cfg2)
-        default = ['raspi','esp-plc','vj3350','vj6530']
-        ch = list(dict.fromkeys(default + (logs.list_channels() or [])))
-        return {'ok': True, 'channels': ch}
+
+        defaults = ["all", "raspi", "esp-plc", "vj3350", "vj6530"]
+        db_ch = logs.list_channels() or []
+        # defaults immer zuerst, danach zusätzliche aus DB (ohne Duplikate)
+        merged = defaults + [c for c in db_ch if c not in defaults]
+
+        return {"ok": True, "channels": merged}
 
     @app.get("/api/ui/logs")
     def get_logs(
@@ -1211,11 +1215,14 @@ async function loadLogs(){
   document.getElementById("log_status").textContent = "loading...";
   const ch = document.getElementById("logch").value;
   const j = await api(`/api/ui/logs?channel=${encodeURIComponent(ch)}&limit=400`);
+  const showCh = (ch === "all");
   const lines = j.items.map(it => {
     const d = new Date(it.ts*1000);
     const t = d.toISOString().replace('T',' ').replace('Z','');
-    return `[${t}] ${String(it.direction||"").toUpperCase()}  ${it.message}`;
-  }).join("\\n");
+    const dir = String(it.direction||"").toUpperCase();
+    const prefix = showCh ? (`[${it.channel||"?"}] `) : "";
+    return `[${t}] ${prefix}${dir}  ${it.message}`;
+  }).join("\n");
   document.getElementById("logview").textContent = lines;
   document.getElementById("log_status").textContent = "ok";
 }
