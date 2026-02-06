@@ -330,9 +330,9 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
             raise HTTPException(status_code=400, detail=msg)
         return {"ok": True, "msg": msg}
 
-    # =========================
-    # ===== LOG API ===========
-    # =========================
+    # ========================
+    # ===== LOG API ==========
+    # ========================
     @app.get("/api/ui/logs/channels")
     def log_channels(x_token: Optional[str] = Header(default=None)):
         cfg2 = Settings.load(cfg_path)
