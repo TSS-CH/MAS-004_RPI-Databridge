@@ -75,7 +75,7 @@ class ParamEdit(BaseModel):
 
 def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
     app = FastAPI(title="MAS-004_RPI-Databridge", version="0.3.0")
-
+    
     cfg = Settings.load(cfg_path)
     db = DB(cfg.db_path)
     outbox = Outbox(db)
@@ -974,9 +974,9 @@ reloadAll();
     # -----------------------------
     # Test UI (Clear output + log handling)
     # -----------------------------
-@app.get("/ui/test", response_class=HTMLResponse)
-def ui_test():
-    return """
+    @app.get("/ui/test", response_class=HTMLResponse)
+    def ui_test():
+        return """
 <!doctype html>
 <html>
 <head>
