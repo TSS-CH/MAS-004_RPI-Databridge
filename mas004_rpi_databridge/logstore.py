@@ -3,7 +3,9 @@ from typing import List, Dict, Any
 from mas004_rpi_databridge.db import DB, now_ts
 
 DEFAULT_LOG_DIR = "/var/lib/mas004_rpi_databridge/logs"
-
+# Channels that should ALWAYS exist in the UI dropdown, even if no logs exist yet.
+# "all" is a virtual channel (aggregates all channels).
+DEFAULT_LOG_CHANNELS = ["all", "raspi", "esp-plc", "vj3350", "vj6530"]
 
 class LogStore:
     def __init__(self, db: DB, log_dir: str = DEFAULT_LOG_DIR):
