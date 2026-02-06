@@ -983,138 +983,109 @@ reloadAll();
   <meta charset="utf-8"/>
   <title>MAS-004 Test UI</title>
   <style>
-    body{font-family:Arial; margin:20px; max-width:1100px}
-    .muted{color:#666}
-    .pill{display:inline-block; padding:2px 8px; border:1px solid #aaa; border-radius:999px; font-size:12px}
-    input{padding:8px; border:1px solid #bbb; border-radius:6px}
-    button{padding:7px 10px}
-    pre{background:#f7f7f7; border:1px solid #ddd; padding:10px; border-radius:6px; white-space:pre-wrap}
-    select{padding:7px}
+    body{font-family:Arial; margin:20px; max-width:1200px}
     .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    input,select{padding:8px; border:1px solid #ccc; border-radius:6px}
+    button{padding:6px 10px}
+    pre{background:#f6f6f6; padding:10px; border-radius:6px; border:1px solid #ddd}
+    #out,#logview{white-space:pre-wrap; max-height:400px; overflow:auto}
   </style>
 </head>
 <body>
+  <h2>MAS-004 Test UI</h2>
 
-<h2>MAS-004 Test UI</h2>
-<p class="muted">Tabs simulieren Komponente. Send läuft über Raspi -&gt; Mikrotom.</p>
+  <div class="row">
+    <label>UI Token:</label>
+    <input id="token" style="width:420px" placeholder="MAS004-..."/>
+    <button onclick="saveToken()">Save</button>
+    <span id="tokstate"></span>
+    <a href="/" style="margin-left:auto">Home</a>
+  </div>
 
-<div class="row">
-  <span class="pill" id="jsstate">JS: (not running)</span>
-  <span class="pill" id="tokstate">token: ?</span>
-  <span class="pill" id="status"></span>
-</div>
+  <div class="row" style="margin-top:10px">
+    <button onclick="setTab('raspi')">RASPI</button>
+    <button onclick="setTab('esp-plc')">ESP-PLC</button>
+    <button onclick="setTab('vj3350')">VJ3350</button>
+    <button onclick="setTab('vj6530')">VJ6530</button>
+  </div>
 
-<hr/>
+  <div class="row" style="margin-top:10px">
+    <input id="cmd" style="width:520px" placeholder="z.B. TTP00002=?  oder  TTE1000=1"/>
+    <button onclick="send()">Send</button>
+    <button onclick="clearOut()">Clear Output</button>
+    <span id="status"></span>
+  </div>
 
-<div class="row">
-  <label>UI Token:</label>
-  <input id="token" style="width:420px" placeholder="MAS004-..."/>
-  <button type="button" onclick="saveToken()">Save</button>
-  <button type="button" onclick="clearToken()">Clear</button>
-</div>
+  <h3>Output</h3>
+  <pre id="out"></pre>
 
-<div class="row" style="margin-top:10px">
-  <button type="button" onclick="setTab('raspi')">RASPI</button>
-  <button type="button" onclick="setTab('esp-plc')">ESP-PLC</button>
-  <button type="button" onclick="setTab('vj3350')">VJ3350</button>
-  <button type="button" onclick="setTab('vj6530')">VJ6530</button>
-  <span class="muted">Tab:</span> <b id="tabname"></b>
-</div>
-
-<div class="row" style="margin-top:10px">
-  <input id="cmd" style="width:520px" placeholder="z.B. TTP00002=?  oder  MAS0026=20"/>
-  <button type="button" onclick="send()">Send</button>
-  <button type="button" onclick="clearOut()">Clear Output</button>
-</div>
-
-<h3>Output</h3>
-<pre id="out"></pre>
-
-<h3>Logs</h3>
-<div class="row">
-  <label>Channel:</label>
-  <select id="logch"></select>
-  <button type="button" onclick="loadChannels()">Reload Channels</button>
-  <button type="button" onclick="loadLogs()">Reload Logs</button>
-  <button type="button" onclick="downloadLog()">Download .log</button>
-  <button type="button" onclick="clearLog()">Clear Log</button>
-  <span class="muted" id="log_status"></span>
-</div>
-<pre id="logview"></pre>
+  <h3>Logs</h3>
+  <div class="row">
+    <label>Channel:</label>
+    <select id="logch"></select>
+    <button onclick="loadLogs()">Reload Logs</button>
+    <button onclick="downloadLog()">Download .log</button>
+    <button onclick="clearLog()">Clear Log</button>
+    <span id="log_status"></span>
+  </div>
+  <pre id="logview"></pre>
 
 <script>
 let currentTab = "raspi";
+const TOKEN_KEY = "mas004_ui_token";
 
-function setStatus(msg){ document.getElementById("status").textContent = msg || ""; }
-
-function getToken(){
-  try { return localStorage.getItem("mas004_ui_token") || ""; }
-  catch(e){ return ""; }
+function _cookieGet(name){
+  const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[-.$?*|{}()\\[\\]\\\\\\/\\+^]/g,'\\\\$&') + '=([^;]*)'));
+  return m ? decodeURIComponent(m[1]) : "";
+}
+function _cookieSet(name, value, days){
+  const d = new Date();
+  d.setTime(d.getTime() + (days*24*60*60*1000));
+  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${d.toUTCString()}; path=/; SameSite=Lax`;
 }
 
+function getToken(){
+  try{
+    return localStorage.getItem(TOKEN_KEY) || _cookieGet(TOKEN_KEY) || "";
+  }catch(e){
+    return _cookieGet(TOKEN_KEY) || "";
+  }
+}
+function saveToken(){
+  const v = document.getElementById("token").value.trim();
+  try{ localStorage.setItem(TOKEN_KEY, v); }catch(e){}
+  _cookieSet(TOKEN_KEY, v, 3650);
+  showTok();
+}
 function showTok(){
   const t = getToken();
   document.getElementById("token").value = t;
-  document.getElementById("tokstate").textContent = t ? "token: ok" : "token: (empty)";
-}
-
-function saveToken(){
-  try{
-    const t = (document.getElementById("token").value || "").trim();
-    localStorage.setItem("mas004_ui_token", t);
-    setStatus("saved token to localStorage");
-  }catch(e){
-    setStatus("ERROR saving token: " + e);
-  }
-  showTok();
-}
-
-function clearToken(){
-  try{
-    localStorage.removeItem("mas004_ui_token");
-    setStatus("cleared token");
-  }catch(e){
-    setStatus("ERROR clearing token: " + e);
-  }
-  showTok();
+  document.getElementById("tokstate").textContent = t ? "token ok" : "no token";
 }
 
 async function api(path, opt={}){
   opt.headers = opt.headers || {};
   const t = getToken();
   if(t) opt.headers["X-Token"] = t;
-
   const r = await fetch(path, opt);
   const txt = await r.text();
   let j=null; try{ j=JSON.parse(txt); }catch(e){}
   if(!r.ok){
-    const msg = (j && j.detail) ? j.detail : ("HTTP "+r.status+" "+txt);
-    throw new Error(msg);
+    throw new Error((j && j.detail) ? j.detail : ("HTTP "+r.status+" "+txt));
   }
   return j;
 }
 
 function ts(){ return new Date().toISOString().replace('T',' ').replace('Z',''); }
-
-function logLine(s){
-  const out = document.getElementById("out");
-  out.textContent += s + "\\n";
-}
-
-function clearOut(){
-  document.getElementById("out").textContent = "";
-}
-
-function setTab(t){
-  currentTab = t;
-  document.getElementById("tabname").textContent = currentTab;
-}
+function logLine(s){ document.getElementById("out").textContent += s + "\\n"; }
+function clearOut(){ document.getElementById("out").textContent = ""; }
+function setTab(t){ currentTab = t; }
 
 async function send(){
-  const cmd = (document.getElementById("cmd").value || "").trim();
+  const cmd = document.getElementById("cmd").value.trim();
   if(!cmd) return;
+  document.getElementById("status").textContent = "sending...";
 
-  setStatus("sending...");
   try{
     const payload = {
       method: "POST",
@@ -1124,19 +1095,17 @@ async function send(){
     };
     const j = await api("/api/outbox/enqueue", {
       method:"POST",
-      headers:{"Content-Type":"application/json"},
+      headers: {"Content-Type":"application/json"},
       body: JSON.stringify(payload)
     });
     logLine(`[${ts()}] OUT manual -> ${currentTab}: ${cmd} (idem=${j.idempotency_key})`);
-    setStatus("ok");
-    await loadLogs();
+    document.getElementById("status").textContent = "ok";
   }catch(e){
-    setStatus("ERROR: " + e.message);
+    document.getElementById("status").textContent = "ERROR: " + e.message;
   }
 }
 
 async function loadChannels(){
-  document.getElementById("log_status").textContent = "loading channels...";
   try{
     const j = await api("/api/ui/logs/channels");
     const sel = document.getElementById("logch");
@@ -1146,19 +1115,17 @@ async function loadChannels(){
       o.value = ch; o.textContent = ch;
       sel.appendChild(o);
     }
-    if(j.channels.includes("all")) sel.value = "all";
-    document.getElementById("log_status").textContent = "ok";
+    if(!sel.value && j.channels.length) sel.value = j.channels[0];
   }catch(e){
-    document.getElementById("log_status").textContent = "ERROR: " + e.message;
+    document.getElementById("log_status").textContent = "ERROR: " + e.message + " (Token gesetzt?)";
   }
 }
 
 async function loadLogs(){
-  document.getElementById("log_status").textContent = "loading logs...";
+  const ch = document.getElementById("logch").value || "all";
+  document.getElementById("log_status").textContent = "loading...";
   try{
-    const ch = document.getElementById("logch").value || "all";
     const j = await api(`/api/ui/logs?channel=${encodeURIComponent(ch)}&limit=400`);
-
     const showCh = (ch === "all");
     const lines = j.items.map(it => {
       const d = new Date(it.ts*1000);
@@ -1167,7 +1134,6 @@ async function loadLogs(){
       const prefix = showCh ? (`${it.channel||""} `) : "";
       return `[${t}] ${prefix}${dir}  ${it.message}`;
     }).join("\\n");
-
     document.getElementById("logview").textContent = lines;
     document.getElementById("log_status").textContent = "ok";
   }catch(e){
@@ -1188,28 +1154,20 @@ async function clearLog(){
 
 async function downloadLog(){
   const ch = document.getElementById("logch").value || "all";
-  try{
-    const t = getToken();
-    const r = await fetch(`/api/ui/logs/download?channel=${encodeURIComponent(ch)}`, {headers: t?{"X-Token":t}:{}} );
-    if(!r.ok){ alert(await r.text()); return; }
-    const blob = await r.blob();
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = ch + ".log";
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }catch(e){
-    alert("Download Fehler: " + e);
-  }
+  const t = getToken();
+  const r = await fetch(`/api/ui/logs/download?channel=${encodeURIComponent(ch)}`, {headers: t?{"X-Token":t}:{}} );
+  if(!r.ok){ alert(await r.text()); return; }
+  const blob = await r.blob();
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = ch + ".log";
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
-// JS running marker:
-document.getElementById("jsstate").textContent = "JS: OK";
-setTab("raspi");
 showTok();
-loadChannels().then(loadLogs);
+setTab("raspi");
+(async ()=>{ await loadChannels(); await loadLogs(); })();
 </script>
-
-</body>
-</html>
-    """
+</body></html>
+"""
