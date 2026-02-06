@@ -43,6 +43,17 @@ class Settings:
     retry_base_s: float = 1.0
     retry_cap_s: float = 60.0
 
+    # Device endpoints (optional; editable in UI)
+    # ESP-PLC (HTTP)
+    esp_host: str = ""
+    esp_port: int = 0
+
+    # Printers
+    vj3350_host: str = ""
+    vj3350_port: int = 0
+    vj6530_host: str = ""
+    vj6530_port: int = 0
+
     # UI/API auth
     ui_token: str = "change-me"
     shared_secret: str = ""
