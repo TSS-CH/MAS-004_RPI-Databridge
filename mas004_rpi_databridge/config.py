@@ -19,6 +19,10 @@ class Settings:
     # Interface labels (Info)
     eth0_ip: str = ""
     eth1_ip: str = ""
+    eth0_subnet: str = "24"
+    eth0_gateway: str = ""
+    eth1_subnet: str = "24"
+    eth1_gateway: str = ""
     eth0_source_ip: str = ""  # outgoing source bind for HttpClient (optional)
 
     # Peer (Mikrotom)
@@ -27,7 +31,7 @@ class Settings:
     peer_health_path: str = "/health"
 
     # Watchdog
-    watchdog_interval_s: float = 2.0
+    watchdog_interval_s: float = 5.0
     watchdog_timeout_s: float = 1.0
     watchdog_down_after: int = 3
 

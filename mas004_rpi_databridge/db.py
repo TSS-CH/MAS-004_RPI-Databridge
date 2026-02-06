@@ -28,6 +28,16 @@ CREATE TABLE IF NOT EXISTS inbox (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_inbox_dedupe ON inbox(idempotency_key);
 CREATE INDEX IF NOT EXISTS idx_inbox_state ON inbox(state, received_ts);
 
+CREATE TABLE IF NOT EXISTS logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts REAL NOT NULL,
+  channel TEXT NOT NULL,
+  direction TEXT NOT NULL,
+  message TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_logs_ts ON logs(ts);
+CREATE INDEX IF NOT EXISTS idx_logs_ch_ts ON logs(channel, ts);
+
 -- ===== Parameter-Tabellen =====
 CREATE TABLE IF NOT EXISTS params (
   pkey TEXT PRIMARY KEY,          -- z.B. TTP00002
