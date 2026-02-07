@@ -565,12 +565,12 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
   <meta charset="utf-8"/>
   <title>Params UI</title>
   <style>
-    body{{font-family:Segoe UI,Arial,sans-serif; margin:0; background:#f4f6f9; color:#1f2933}}
-    .wrap{{max-width:1200px; margin:0 auto; padding:16px}}
-    .topnav{{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}}
-    .navbtn{{padding:8px 12px; border:1px solid #d6dde7; border-radius:8px; background:#fff; color:#1f2933; text-decoration:none}}
-    .navbtn.active{{background:#005eb8; color:#fff; border-color:#005eb8}}
-    .card{{background:#fff; border:1px solid #d6dde7; border-radius:10px; padding:14px}}
+    body{font-family:Segoe UI,Arial,sans-serif; margin:0; background:#f4f6f9; color:#1f2933}
+    .wrap{max-width:1200px; margin:0 auto; padding:16px}
+    .topnav{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}
+    .navbtn{padding:8px 12px; border:1px solid #d6dde7; border-radius:8px; background:#fff; color:#1f2933; text-decoration:none}
+    .navbtn.active{background:#005eb8; color:#fff; border-color:#005eb8}
+    .card{background:#fff; border:1px solid #d6dde7; border-radius:10px; padding:14px}
     table{border-collapse:collapse; width:100%}
     th,td{border:1px solid #ddd; padding:6px; font-size:13px}
     th{background:#f3f3f3; position:sticky; top:0}
@@ -784,68 +784,23 @@ load();
   <style>
 
   :root{
-    --vj-navy:#003A70;
-    --vj-blue:#005EB8;
-    --vj-red:#E4002B;
-    --bg:#F5F7FA;
-    --card:#FFFFFF;
-    --text:#1D232B;
-    --muted:#5F6B7A;
-    --border:#D8E0EA;
-    --radius:14px;
-    --shadow:0 6px 24px rgba(0,0,0,.08);
+    --blue:#005eb8;
+    --red:#c62828;
+    --bg:#f4f6f9;
+    --card:#ffffff;
+    --text:#1f2933;
+    --muted:#5f6b7a;
+    --border:#d6dde7;
+    --radius:10px;
+    --shadow:none;
   }
-  html,body{height:100%;}
   body{
     margin:0;
-    font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
+    font-family:Segoe UI,Arial,sans-serif;
     background:var(--bg);
     color:var(--text);
   }
-  header{
-    background:linear-gradient(90deg,var(--vj-navy),var(--vj-blue));
-    color:#fff;
-    padding:14px 18px;
-    box-shadow:0 2px 14px rgba(0,0,0,.15);
-    position:sticky;
-    top:0;
-    z-index:10;
-  }
-  header .row{
-    display:flex;
-    align-items:center;
-    gap:14px;
-    justify-content:space-between;
-    flex-wrap:wrap;
-  }
-  .brand{
-    display:flex;
-    align-items:center;
-    gap:12px;
-  }
-  .badge{
-    font-size:12px;
-    padding:4px 8px;
-    border:1px solid rgba(255,255,255,.35);
-    border-radius:999px;
-    opacity:.95;
-  }
-  main{padding:18px; max-width:1200px; margin:0 auto;}
-  .grid{
-    display:grid;
-    grid-template-columns:repeat(12,1fr);
-    gap:14px;
-  }
-  .card{
-    grid-column:span 12;
-    background:var(--card);
-    border:1px solid var(--border);
-    border-radius:var(--radius);
-    box-shadow:var(--shadow);
-    padding:16px;
-  }
-  .card h2{margin:0 0 10px 0; font-size:18px;}
-  .sub{color:var(--muted); font-size:13px; margin-top:2px;}
+  .wrap{max-width:1200px; margin:0 auto; padding:16px}
   .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
   label{font-size:12px; color:var(--muted);}
   input,select,textarea{
@@ -858,20 +813,8 @@ load();
     outline:none;
   }
   textarea{min-height:110px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
-  input:focus,select:focus,textarea:focus{border-color:var(--vj-blue); box-shadow:0 0 0 3px rgba(0,94,184,.15);}
-  .btn{
-    appearance:none;
-    border:0;
-    cursor:pointer;
-    padding:10px 14px;
-    border-radius:12px;
-    font-weight:600;
-    font-size:14px;
-  }
-  .btn.primary{background:var(--vj-blue); color:#fff;}
-  .btn.danger{background:var(--vj-red); color:#fff;}
-  .btn.ghost{background:#fff; border:1px solid rgba(255,255,255,.45); color:#fff;}
-  .btn:active{transform:translateY(1px);}
+  input:focus,select:focus,textarea:focus{border-color:var(--blue); box-shadow:0 0 0 3px rgba(0,94,184,.15);}
+  button{padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; cursor:pointer}
   .pill{
     display:inline-flex;
     align-items:center;
@@ -882,14 +825,18 @@ load();
     font-size:13px;
     background:#fff;
   }
-  .ok{color:#0B7A3B; font-weight:700;}
-  .bad{color:var(--vj-red); font-weight:700;}
-  .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
-  .split{display:grid; grid-template-columns:repeat(12,1fr); gap:12px;}
-  .col6{grid-column:span 6;}
-  .col4{grid-column:span 4;}
-  .col8{grid-column:span 8;}
-  @media(max-width:900px){.col6,.col4,.col8{grid-column:span 12;}}
+  .muted{color:var(--muted);}
+  fieldset{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:14px;
+    margin:12px 0;
+  }
+  legend{padding:0 6px; font-weight:600;}
+  pre{background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px; overflow:auto;}
+  @media(max-width:900px){fieldset .row input{width:100%!important;}}
   .topnav{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}
   .navbtn{padding:8px 12px; border:1px solid #d6dde7; border-radius:8px; background:#fff; color:#1f2933; text-decoration:none}
   .navbtn.active{background:#005eb8; color:#fff; border-color:#005eb8}
@@ -897,9 +844,8 @@ load();
 </style>
 </head>
 <body>
-  <div style="max-width:1200px; margin:0 auto; padding:16px 18px 0 18px;">
+  <div class="wrap">
     __NAV__
-  </div>
   <h2>System Settings</h2>
   <p class="muted">
     Token wird im Browser gespeichert (localStorage). Aenderungen an Network koennen dich aussperren - daher "Apply now" bewusst setzen.
@@ -982,6 +928,7 @@ load();
       <span id="dev_status" class="muted"></span>
     </div>
   </fieldset>
+  </div>
 
 <script>
 function getToken(){ return localStorage.getItem("mas004_ui_token") || ""; }
@@ -1355,6 +1302,8 @@ reloadAll();
 <script>
 const TOKEN_KEY = "mas004_ui_token";
 const SOURCES = ["raspi","esp-plc","vj3350","vj6530"];
+const AUTO_LOG_MS = 2000;
+let autoLogTimer = null;
 
 function sid(source){ return String(source||"").replace(/-/g, "_"); }
 function el(id){ return document.getElementById(id); }
@@ -1458,12 +1407,12 @@ async function sendFrom(source){
     setStatus(source, "ERROR: " + e.message, true);
   }
 }
-async function loadLogs(source){
-  setLogStatus(source, "loading...");
+async function loadLogs(source, silent=false){
+  if(!silent) setLogStatus(source, "loading...");
   try{
     const j = await api(`/api/ui/logs?channel=${encodeURIComponent(source)}&limit=350`);
     el(`log_${sid(source)}`).textContent = formatLogs(j.items || []);
-    setLogStatus(source, "ok");
+    if(!silent) setLogStatus(source, "ok");
   }catch(e){
     setLogStatus(source, "ERROR: " + e.message, true);
   }
@@ -1491,13 +1440,27 @@ async function downloadLog(source){
   a.click();
   URL.revokeObjectURL(a.href);
 }
-async function reloadAll(){
-  const jobs = SOURCES.map(src => loadLogs(src));
+async function reloadAll(silent=false){
+  const jobs = SOURCES.map(src => loadLogs(src, silent));
   await Promise.all(jobs);
+}
+
+function startAutoLogRefresh(){
+  if(autoLogTimer) return;
+  autoLogTimer = setInterval(() => {
+    if(document.hidden) return;
+    reloadAll(true);
+  }, AUTO_LOG_MS);
 }
 
 showTok();
 reloadAll();
+startAutoLogRefresh();
+document.addEventListener("visibilitychange", () => {
+  if(!document.hidden){
+    reloadAll(true);
+  }
+});
 </script>
 </body></html>
 """.replace("__NAV__", nav)
