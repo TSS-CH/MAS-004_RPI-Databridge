@@ -18,6 +18,7 @@ from mas004_rpi_databridge.inbox import Inbox
 from mas004_rpi_databridge.params import ParamStore
 from mas004_rpi_databridge.logstore import LogStore
 from mas004_rpi_databridge.netconfig import IfaceCfg, apply_static, get_current_ip_info
+from mas004_rpi_databridge.protocol import normalize_pid
 
 
 def require_token(x_token: Optional[str], cfg: Settings):
@@ -352,6 +353,8 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
             pid = parsed.group(2)
             rhs = parsed.group(3).strip()
             if rhs != "?":
+                if pid.isdigit():
+                    pid = normalize_pid(ptype, pid)
                 pkey = f"{ptype}{pid}"
                 persisted, persist_msg = params.apply_device_value(pkey, rhs)
                 if not persisted:

@@ -208,17 +208,6 @@ class ParamStore:
         if not meta:
             return False, "NAK_UnknownParam"
 
-        min_v = meta.get("min_v")
-        max_v = meta.get("max_v")
-        try:
-            fv = float(value)
-            if min_v is not None and fv < float(min_v):
-                return False, "NAK_OutOfRange"
-            if max_v is not None and fv > float(max_v):
-                return False, "NAK_OutOfRange"
-        except Exception:
-            pass
-
         ts = now_ts()
         with self.db._conn() as c:
             c.execute(
