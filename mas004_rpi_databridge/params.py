@@ -198,6 +198,36 @@ class ParamStore:
             )
         return True, "OK"
 
+    def apply_device_value(self, pkey: str, value: str) -> Tuple[bool, str]:
+        """
+        Speichert einen von Device-Seite gemeldeten Wert (TTO/Laser/ESP) lokal.
+        Im Unterschied zu set_value() wird rw NICHT blockiert, da ReadOnly hier nur
+        fuer Mikrotom-Schreibrechte gilt, nicht fuer eingehende Status-/Fehlermeldungen.
+        """
+        meta = self.get_meta(pkey)
+        if not meta:
+            return False, "NAK_UnknownParam"
+
+        min_v = meta.get("min_v")
+        max_v = meta.get("max_v")
+        try:
+            fv = float(value)
+            if min_v is not None and fv < float(min_v):
+                return False, "NAK_OutOfRange"
+            if max_v is not None and fv > float(max_v):
+                return False, "NAK_OutOfRange"
+        except Exception:
+            pass
+
+        ts = now_ts()
+        with self.db._conn() as c:
+            c.execute(
+                "INSERT INTO param_values(pkey,value,updated_ts) VALUES(?,?,?) "
+                "ON CONFLICT(pkey) DO UPDATE SET value=excluded.value, updated_ts=excluded.updated_ts",
+                (pkey, str(value), ts)
+            )
+        return True, "OK"
+
     def update_meta(
         self,
         pkey: str,

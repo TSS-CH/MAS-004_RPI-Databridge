@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI, Request, HTTPException, Header, UploadFile, File, Query
 from fastapi.responses import HTMLResponse, Response
+from fastapi.openapi.docs import get_swagger_ui_html
 from pydantic import BaseModel
 import json
 import subprocess
@@ -83,7 +84,7 @@ class TestSendReq(BaseModel):
 
 
 def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
-    app = FastAPI(title="MAS-004_RPI-Databridge", version="0.3.0")
+    app = FastAPI(title="MAS-004_RPI-Databridge", version="0.3.0", docs_url=None)
     
     cfg = Settings.load(cfg_path)
     db = DB(cfg.db_path)
@@ -119,25 +120,97 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
 
         return s
 
+    def nav_html(active: str) -> str:
+        items = [
+            ("home", "/", "Home"),
+            ("docs", "/docs", "API Docs"),
+            ("params", "/ui/params", "Parameter"),
+            ("test", "/ui/test", "Test UI"),
+            ("settings", "/ui/settings", "Settings"),
+        ]
+        links = []
+        for key, href, label in items:
+            cls = "navbtn active" if key == active else "navbtn"
+            links.append(f'<a class="{cls}" href="{href}">{label}</a>')
+        return '<nav class="topnav">' + "".join(links) + "</nav>"
+
     # -----------------------------
     # Home
     # -----------------------------
+    @app.get("/docs/swagger", include_in_schema=False)
+    def docs_swagger():
+        return get_swagger_ui_html(openapi_url=app.openapi_url, title=f"{app.title} - Swagger")
+
+    @app.get("/docs", response_class=HTMLResponse, include_in_schema=False)
+    def docs_page():
+        nav = nav_html("docs")
+        return f"""
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>API Docs</title>
+  <style>
+    body{{margin:0; font-family:Segoe UI,Arial,sans-serif; background:#f4f6f9; color:#1f2933}}
+    .wrap{{max-width:1500px; margin:0 auto; padding:16px}}
+    .topnav{{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}}
+    .navbtn{{padding:8px 12px; border:1px solid #d6dde7; border-radius:8px; background:#fff; color:#1f2933; text-decoration:none}}
+    .navbtn.active{{background:#005eb8; color:#fff; border-color:#005eb8}}
+    .card{{background:#fff; border:1px solid #d6dde7; border-radius:10px; overflow:hidden}}
+    .card h2{{margin:0; padding:12px 14px; border-bottom:1px solid #d6dde7}}
+    iframe{{width:100%; height:calc(100vh - 170px); border:0}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    {nav}
+    <div class="card">
+      <h2>API Documentation</h2>
+      <iframe src="/docs/swagger"></iframe>
+    </div>
+  </div>
+</body>
+</html>
+"""
+
     @app.get("/", response_class=HTMLResponse)
     def home():
         cfg2 = Settings.load(cfg_path)
+        nav = nav_html("home")
         return f"""
-        <html><body style="font-family:Arial;max-width:1000px;margin:20px">
-        <h2>MAS-004_RPI-Databridge</h2>
-        <p><b>eth0:</b> {cfg2.eth0_ip} | <b>eth1:</b> {cfg2.eth1_ip}</p>
-        <p><b>Outbox:</b> {outbox.count()} | <b>Inbox pending:</b> {inbox.count_pending()}</p>
-        <p><b>Peer:</b> {cfg2.peer_base_url} | Watchdog: {cfg2.peer_watchdog_host}</p>
-        <p>
-          <a href="/docs">API Docs</a> |
-          <a href="/ui/params">Parameter UI</a> |
-          <a href="/ui/test">Test UI</a> |
-          <a href="/ui/settings">System Settings</a>
-        </p>
-        </body></html>
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>MAS-004 Home</title>
+  <style>
+    body{{margin:0; font-family:Segoe UI,Arial,sans-serif; background:#f4f6f9; color:#1f2933}}
+    .wrap{{max-width:1200px; margin:0 auto; padding:16px}}
+    .topnav{{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}}
+    .navbtn{{padding:8px 12px; border:1px solid #d6dde7; border-radius:8px; background:#fff; color:#1f2933; text-decoration:none}}
+    .navbtn.active{{background:#005eb8; color:#fff; border-color:#005eb8}}
+    .card{{background:#fff; border:1px solid #d6dde7; border-radius:10px; padding:14px}}
+    .grid{{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px}}
+    @media(max-width:900px){{.grid{{grid-template-columns:1fr;}}}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    {nav}
+    <div class="card">
+      <h2>MAS-004_RPI-Databridge</h2>
+      <div class="grid">
+        <div><b>eth0</b>: {cfg2.eth0_ip}</div>
+        <div><b>eth1</b>: {cfg2.eth1_ip}</div>
+        <div><b>Outbox</b>: {outbox.count()}</div>
+        <div><b>Inbox pending</b>: {inbox.count_pending()}</div>
+        <div><b>Peer</b>: {cfg2.peer_base_url}</div>
+        <div><b>Watchdog host</b>: {cfg2.peer_watchdog_host}</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
         """
 
     @app.get("/ui", response_class=HTMLResponse)
@@ -253,6 +326,7 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
         src = normalize_test_source(req.source)
         hint = req.ptype_hint if req.ptype_hint is not None else default_ptype_hint.get(src, "")
         line = normalize_test_line(req.msg, hint)
+        parsed = re.match(r"^\s*([A-Za-z]{3})([0-9A-Za-z_]+)\s*=\s*(.+?)\s*$", line)
 
         url = cfg2.peer_base_url.rstrip("/") + "/api/inbox"
         headers = {}
@@ -271,6 +345,18 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
 
         logs.log(src, "out", f"manual->raspi: {line}")
         logs.log("raspi", "in", f"{src}: {line}")
+        persisted = None
+        persist_msg = None
+        if parsed:
+            ptype = parsed.group(1).upper()
+            pid = parsed.group(2)
+            rhs = parsed.group(3).strip()
+            if rhs != "?":
+                pkey = f"{ptype}{pid}"
+                persisted, persist_msg = params.apply_device_value(pkey, rhs)
+                if not persisted:
+                    logs.log("raspi", "info", f"device value not persisted for {pkey}: {persist_msg}")
+
         idem = outbox.enqueue(
             "POST",
             url,
@@ -286,6 +372,8 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
             "route": f"{src}->raspi->mikrotom",
             "ack": "ACK_QUEUED",
             "idempotency_key": idem,
+            "persisted_local": persisted,
+            "persist_msg": persist_msg,
         }
 
     # -----------------------------
@@ -466,6 +554,7 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
     # =========================
     @app.get("/ui/params", response_class=HTMLResponse)
     def ui_params():
+        nav = nav_html("params")
         return """
 <!doctype html>
 <html>
@@ -473,7 +562,12 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
   <meta charset="utf-8"/>
   <title>Params UI</title>
   <style>
-    body{font-family:Arial; margin:20px; max-width:1200px}
+    body{{font-family:Segoe UI,Arial,sans-serif; margin:0; background:#f4f6f9; color:#1f2933}}
+    .wrap{{max-width:1200px; margin:0 auto; padding:16px}}
+    .topnav{{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}}
+    .navbtn{{padding:8px 12px; border:1px solid #d6dde7; border-radius:8px; background:#fff; color:#1f2933; text-decoration:none}}
+    .navbtn.active{{background:#005eb8; color:#fff; border-color:#005eb8}}
+    .card{{background:#fff; border:1px solid #d6dde7; border-radius:10px; padding:14px}}
     table{border-collapse:collapse; width:100%}
     th,td{border:1px solid #ddd; padding:6px; font-size:13px}
     th{background:#f3f3f3; position:sticky; top:0}
@@ -485,6 +579,9 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
   </style>
 </head>
 <body>
+  <div class="wrap">
+  __NAV__
+  <div class="card">
   <h2>Parameter UI</h2>
   <p class="muted">Token wird im Browser gespeichert (localStorage). Export/Import/Edit braucht X-Token.</p>
 
@@ -520,6 +617,8 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
     </thead>
     <tbody id="tbody"></tbody>
   </table>
+  </div>
+  </div>
 
 <script>
 const LS_KEY = "mas004_ui_token";
@@ -665,13 +764,14 @@ load();
 </script>
 </body>
 </html>
-        """
+        """.replace("__NAV__", nav)
 
     # -----------------------------
     # Settings UI
     # -----------------------------
     @app.get("/ui/settings", response_class=HTMLResponse)
     def ui_settings():
+        nav = nav_html("settings")
         return """
 <!doctype html>
 <html>
@@ -787,10 +887,16 @@ load();
   .col4{grid-column:span 4;}
   .col8{grid-column:span 8;}
   @media(max-width:900px){.col6,.col4,.col8{grid-column:span 12;}}
+  .topnav{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}
+  .navbtn{padding:8px 12px; border:1px solid #d6dde7; border-radius:8px; background:#fff; color:#1f2933; text-decoration:none}
+  .navbtn.active{background:#005eb8; color:#fff; border-color:#005eb8}
 
 </style>
 </head>
 <body>
+  <div style="max-width:1200px; margin:0 auto; padding:16px 18px 0 18px;">
+    __NAV__
+  </div>
   <h2>System Settings</h2>
   <p class="muted">
     Token wird im Browser gespeichert (localStorage). Aenderungen an Network koennen dich aussperren - daher "Apply now" bewusst setzen.
@@ -1084,13 +1190,14 @@ showTok();
 reloadAll();
 </script>
 </body></html>
-        """
+        """.replace("__NAV__", nav)
 
     # -----------------------------
     # Test UI
     # -----------------------------
     @app.get("/ui/test", response_class=HTMLResponse)
     def ui_test():
+        nav = nav_html("test")
         return """
 <!doctype html>
 <html>
@@ -1112,6 +1219,9 @@ reloadAll();
     .wrap{max-width:1500px; margin:0 auto; padding:16px}
     .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
     .top{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px}
+    .topnav{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}
+    .navbtn{padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:#1f2933; text-decoration:none}
+    .navbtn.active{background:#005eb8; color:#fff; border-color:#005eb8}
     .grid{display:grid; gap:12px; grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:12px}
     .card{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px}
     .card h3{margin:0 0 8px 0}
@@ -1142,6 +1252,7 @@ reloadAll();
 <body>
   <div class="wrap">
     <h2>MAS-004 Test UI</h2>
+    __NAV__
     <div class="top row">
       <label>UI Token:</label>
       <input id="token" style="width:360px" placeholder="MAS004-..."/>
@@ -1386,7 +1497,7 @@ showTok();
 reloadAll();
 </script>
 </body></html>
-"""
+""".replace("__NAV__", nav)
 
     return app
 
