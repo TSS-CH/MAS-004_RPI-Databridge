@@ -184,11 +184,17 @@ class ParamStore:
         except Exception:
             pass
 
+        ts = now_ts()
         with self.db._conn() as c:
             c.execute(
                 "INSERT INTO param_values(pkey,value,updated_ts) VALUES(?,?,?) "
                 "ON CONFLICT(pkey) DO UPDATE SET value=excluded.value, updated_ts=excluded.updated_ts",
-                (pkey, str(value), now_ts())
+                (pkey, str(value), ts)
+            )
+            # Fuer den Testbetrieb soll ein erfolgreiches Write auch den Default-Wert fortschreiben.
+            c.execute(
+                "UPDATE params SET default_v=?, updated_ts=? WHERE pkey=?",
+                (str(value), ts, pkey),
             )
         return True, "OK"
 

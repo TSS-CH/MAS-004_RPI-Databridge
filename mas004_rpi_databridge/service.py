@@ -6,7 +6,11 @@ import uvicorn
 
 from mas004_rpi_databridge.config import Settings, DEFAULT_CFG_PATH
 from mas004_rpi_databridge.db import DB
+from mas004_rpi_databridge.inbox import Inbox
+from mas004_rpi_databridge.logstore import LogStore
 from mas004_rpi_databridge.outbox import Outbox
+from mas004_rpi_databridge.params import ParamStore
+from mas004_rpi_databridge.router import Router
 from mas004_rpi_databridge.http_client import HttpClient
 from mas004_rpi_databridge.watchdog import Watchdog
 from mas004_rpi_databridge.webui import build_app
@@ -63,12 +67,35 @@ def sender_loop(cfg_path: str):
                 print(f"[OUTBOX] FAIL id={job.id} rc={rc} next_in={int(next_ts-time.time())}s err={repr(e)}", flush=True)
                 outbox.reschedule(job.id, rc, next_ts)
 
+
+def router_loop(cfg_path: str):
+    while True:
+        try:
+            cfg = Settings.load(cfg_path)
+            db = DB(cfg.db_path)
+            inbox = Inbox(db)
+            outbox = Outbox(db)
+            params = ParamStore(db)
+            logs = LogStore(db)
+            router = Router(cfg, inbox, outbox, params, logs)
+
+            while True:
+                did_work = router.tick_once()
+                if not did_work:
+                    time.sleep(0.1)
+        except Exception as e:
+            print(f"[ROUTER] loop error: {repr(e)}", flush=True)
+            time.sleep(1.0)
+
+
 def main():
     cfg_path = DEFAULT_CFG_PATH
     cfg = Settings.load(cfg_path)
 
-    t = threading.Thread(target=sender_loop, args=(cfg_path,), daemon=True)
-    t.start()
+    sender_t = threading.Thread(target=sender_loop, args=(cfg_path,), daemon=True)
+    sender_t.start()
+    router_t = threading.Thread(target=router_loop, args=(cfg_path,), daemon=True)
+    router_t.start()
 
     app = build_app(cfg_path)
 

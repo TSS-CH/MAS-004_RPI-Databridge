@@ -1,24 +1,24 @@
 import json
 import re
-import time
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Optional, Tuple
 
 from mas004_rpi_databridge.config import Settings
-from mas004_rpi_databridge.inbox import Inbox, InboxMsg
+from mas004_rpi_databridge.inbox import Inbox
 from mas004_rpi_databridge.outbox import Outbox
 from mas004_rpi_databridge.params import ParamStore
 from mas004_rpi_databridge.logstore import LogStore
+from mas004_rpi_databridge.protocol import normalize_pid
 
 READONLY_TYPES = {"TTE", "TTW", "LSE", "LSW", "MAE", "MAW"}  # push-only
 
 def _channel_for_ptype(ptype: str) -> str:
     ptype = (ptype or "").upper()
     if ptype.startswith("TT"):   # TTP/TTE/TTW
-        return "tto"
+        return "vj6530"
     if ptype.startswith("LS"):   # LSE/LSW
-        return "laser"
-    if ptype.startswith("MA") or ptype.startswith("MAP") or ptype.startswith("MAS"):
-        return "esp"
+        return "vj3350"
+    if ptype.startswith("MA"):   # MAP/MAS/MAE/MAW
+        return "esp-plc"
     return "raspi"
 
 def _extract_msg_line(body_json: Optional[str]) -> Optional[str]:
@@ -58,6 +58,8 @@ def _parse_line(line: str) -> Optional[Tuple[str, str, str, str]]:
 
     ptype = m.group(1).upper()
     pid = m.group(2)
+    if pid.isdigit():
+        pid = normalize_pid(ptype, pid)
     rhs = m.group(3)
     if rhs == "?":
         return (ptype, pid, "read", "?")
@@ -96,7 +98,11 @@ class Router:
             if ptype in READONLY_TYPES:
                 resp = f"{pkey}=NAK_ReadOnly"
             else:
-                resp = f"{pkey}={self.params.get_effective_value(pkey)}"
+                meta = self.params.get_meta(pkey)
+                if not meta:
+                    resp = f"{pkey}=NAK_UnknownParam"
+                else:
+                    resp = f"{pkey}={self.params.get_effective_value(pkey)}"
             # Gerät -> Raspi
             self.logs.log(dev, "out", f"{dev}->raspi: {resp}")
             # Raspi -> Mikrotom
