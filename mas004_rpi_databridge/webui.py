@@ -121,6 +121,16 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
 
         return s
 
+    def split_test_messages(raw_msg: str) -> list[str]:
+        text = (raw_msg or "").strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="Empty message")
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+        parts = [p.strip() for p in re.split(r"[,\n;]+", normalized) if p.strip()]
+        if not parts:
+            raise HTTPException(status_code=400, detail="Empty message")
+        return parts
+
     def nav_html(active: str) -> str:
         items = [
             ("home", "/", "Home"),
@@ -326,59 +336,74 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
 
         src = normalize_test_source(req.source)
         hint = req.ptype_hint if req.ptype_hint is not None else default_ptype_hint.get(src, "")
-        line = normalize_test_line(req.msg, hint)
-        parsed = re.match(r"^\s*([A-Za-z]{3})([0-9A-Za-z_]+)\s*=\s*(.+?)\s*$", line)
-
+        lines = [normalize_test_line(part, hint) for part in split_test_messages(req.msg)]
         url = cfg2.peer_base_url.rstrip("/") + "/api/inbox"
         headers = {}
-        persisted = None
-        persist_msg = None
-        if parsed:
-            ptype = parsed.group(1).upper()
-            pid = parsed.group(2)
-            rhs = parsed.group(3).strip()
-            if rhs != "?":
-                if pid.isdigit():
-                    pid = normalize_pid(ptype, pid)
-                pkey = f"{ptype}{pid}"
-                persisted, persist_msg = params.apply_device_value(pkey, rhs)
-                if not persisted:
-                    logs.log("raspi", "info", f"value not persisted for {pkey}: {persist_msg}")
+        items = []
 
-        if src == "raspi":
-            logs.log("raspi", "out", f"manual->mikrotom: {line}")
-            idem = outbox.enqueue("POST", url, headers, {"msg": line, "source": "raspi"}, None)
-            return {
-                "ok": True,
+        for line in lines:
+            parsed = re.match(r"^\s*([A-Za-z]{3})([0-9A-Za-z_]+)\s*=\s*(.+?)\s*$", line)
+            persisted = None
+            persist_msg = None
+            if parsed:
+                ptype = parsed.group(1).upper()
+                pid = parsed.group(2)
+                rhs = parsed.group(3).strip()
+                if rhs != "?":
+                    if pid.isdigit():
+                        pid = normalize_pid(ptype, pid)
+                    pkey = f"{ptype}{pid}"
+                    persisted, persist_msg = params.apply_device_value(pkey, rhs)
+                    if not persisted:
+                        logs.log("raspi", "info", f"value not persisted for {pkey}: {persist_msg}")
+
+            if src == "raspi":
+                logs.log("raspi", "out", f"manual->mikrotom: {line}")
+                idem = outbox.enqueue("POST", url, headers, {"msg": line, "source": "raspi"}, None)
+                items.append({
+                    "source": src,
+                    "line": line,
+                    "route": "raspi->mikrotom",
+                    "ack": "ACK_QUEUED",
+                    "idempotency_key": idem,
+                    "persisted_local": persisted,
+                    "persist_msg": persist_msg,
+                })
+                continue
+
+            logs.log(src, "out", f"manual->raspi: {line}")
+            logs.log("raspi", "in", f"{src}: {line}")
+            idem = outbox.enqueue(
+                "POST",
+                url,
+                headers,
+                {"msg": line, "source": "raspi", "origin": src},
+                None,
+            )
+            logs.log("raspi", "out", f"forward to mikrotom: {line}")
+            items.append({
                 "source": src,
                 "line": line,
-                "route": "raspi->mikrotom",
+                "route": f"{src}->raspi->mikrotom",
                 "ack": "ACK_QUEUED",
                 "idempotency_key": idem,
                 "persisted_local": persisted,
                 "persist_msg": persist_msg,
-            }
+            })
 
-        logs.log(src, "out", f"manual->raspi: {line}")
-        logs.log("raspi", "in", f"{src}: {line}")
-
-        idem = outbox.enqueue(
-            "POST",
-            url,
-            headers,
-            {"msg": line, "source": "raspi", "origin": src},
-            None,
-        )
-        logs.log("raspi", "out", f"forward to mikrotom: {line}")
+        first = items[0]
         return {
             "ok": True,
             "source": src,
-            "line": line,
-            "route": f"{src}->raspi->mikrotom",
-            "ack": "ACK_QUEUED",
-            "idempotency_key": idem,
-            "persisted_local": persisted,
-            "persist_msg": persist_msg,
+            "count": len(items),
+            "items": items,
+            # Legacy single-item fields for older UI clients.
+            "line": first["line"],
+            "route": first["route"],
+            "ack": first["ack"],
+            "idempotency_key": first["idempotency_key"],
+            "persisted_local": first["persisted_local"],
+            "persist_msg": first["persist_msg"],
         }
 
     # -----------------------------
@@ -1217,11 +1242,11 @@ reloadAll();
     <div class="grid">
       <section class="card">
         <h3>RASPI-PLC</h3>
-        <div class="muted">Manual input goes directly to Mikrotom.</div>
+        <div class="muted">Manual input goes directly to Mikrotom. Multi-send: separate with comma, semicolon or new line.</div>
         <div class="row" style="margin-top:8px">
           <label>ParamType hint</label>
           <input id="hint_raspi" style="width:90px" placeholder="optional" value=""/>
-          <input id="cmd_raspi" style="flex:1; min-width:260px" placeholder="e.g. TTP00002=? or MAP0001=500"/>
+          <input id="cmd_raspi" style="flex:1; min-width:260px" placeholder="e.g. TTP00002=23, TTP00003=10 or MAP0001=500"/>
           <button class="primary" onclick="sendFrom('raspi')">Send</button>
           <button onclick="clearOutput('raspi')">Clear Output</button>
           <span id="st_raspi" class="pill"></span>
@@ -1238,11 +1263,11 @@ reloadAll();
 
       <section class="card">
         <h3>ESP-PLC</h3>
-        <div class="muted">Manual input goes ESP-PLC -> RASPI -> Mikrotom.</div>
+        <div class="muted">Manual input goes ESP-PLC -> RASPI -> Mikrotom. Multi-send supported.</div>
         <div class="row" style="margin-top:8px">
           <label>ParamType hint</label>
           <input id="hint_esp_plc" style="width:90px" value="MAS"/>
-          <input id="cmd_esp_plc" style="flex:1; min-width:260px" placeholder="e.g. 0026=20 or MAP0001=500"/>
+          <input id="cmd_esp_plc" style="flex:1; min-width:260px" placeholder="e.g. 0026=20, 0027=11 or MAP0001=500"/>
           <button class="primary" onclick="sendFrom('esp-plc')">Send</button>
           <button onclick="clearOutput('esp-plc')">Clear Output</button>
           <span id="st_esp_plc" class="pill"></span>
@@ -1259,11 +1284,11 @@ reloadAll();
 
       <section class="card">
         <h3>VJ3350 (Laser)</h3>
-        <div class="muted">Manual input goes VJ3350 -> RASPI -> Mikrotom.</div>
+        <div class="muted">Manual input goes VJ3350 -> RASPI -> Mikrotom. Multi-send supported.</div>
         <div class="row" style="margin-top:8px">
           <label>ParamType hint</label>
           <input id="hint_vj3350" style="width:90px" value="LSE"/>
-          <input id="cmd_vj3350" style="flex:1; min-width:260px" placeholder="e.g. 1000=1 or LSW1000=1"/>
+          <input id="cmd_vj3350" style="flex:1; min-width:260px" placeholder="e.g. 1000=1; 1001=0 or LSW1000=1"/>
           <button class="primary" onclick="sendFrom('vj3350')">Send</button>
           <button onclick="clearOutput('vj3350')">Clear Output</button>
           <span id="st_vj3350" class="pill"></span>
@@ -1280,11 +1305,11 @@ reloadAll();
 
       <section class="card">
         <h3>VJ6530 (TTO)</h3>
-        <div class="muted">Manual input goes VJ6530 -> RASPI -> Mikrotom.</div>
+        <div class="muted">Manual input goes VJ6530 -> RASPI -> Mikrotom. Multi-send supported.</div>
         <div class="row" style="margin-top:8px">
           <label>ParamType hint</label>
           <input id="hint_vj6530" style="width:90px" value="TTE"/>
-          <input id="cmd_vj6530" style="flex:1; min-width:260px" placeholder="e.g. 1000=1 or TTP00002=?"/>
+          <input id="cmd_vj6530" style="flex:1; min-width:260px" placeholder="e.g. TTP00002=23, TTP00003=10"/>
           <button class="primary" onclick="sendFrom('vj6530')">Send</button>
           <button onclick="clearOutput('vj6530')">Clear Output</button>
           <span id="st_vj6530" class="pill"></span>
@@ -1398,12 +1423,19 @@ async function sendFrom(source){
       headers: {"Content-Type":"application/json"},
       body: JSON.stringify(payload)
     });
-    appendOutput(source, `[${ts()}] ${j.route}: ${j.line} (${j.ack}, idem=${j.idempotency_key})`);
-    if(source !== "raspi"){
-      appendOutput("raspi", `[${ts()}] incoming from ${source}: ${j.line}`);
+    const items = Array.isArray(j.items) && j.items.length ? j.items : [j];
+    for(const it of items){
+      const line = it.line || msg;
+      const route = it.route || (source === "raspi" ? "raspi->mikrotom" : `${source}->raspi->mikrotom`);
+      const ack = it.ack || "ACK_QUEUED";
+      const idem = it.idempotency_key || "-";
+      appendOutput(source, `[${ts()}] ${route}: ${line} (${ack}, idem=${idem})`);
+      if(source !== "raspi"){
+        appendOutput("raspi", `[${ts()}] incoming from ${source}: ${line}`);
+      }
     }
     cmdEl.value = "";
-    setStatus(source, "ok");
+    setStatus(source, items.length > 1 ? `ok (${items.length})` : "ok");
     await Promise.all([loadLogs(source), loadLogs("raspi")]);
   }catch(e){
     setStatus(source, "ERROR: " + e.message, true);
