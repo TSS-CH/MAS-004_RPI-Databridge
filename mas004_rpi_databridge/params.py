@@ -7,6 +7,7 @@ import openpyxl
 from mas004_rpi_databridge.db import DB, now_ts
 
 SHEET_NAME = "Parameter"
+DEVICE_PUSH_PTYPES = {"TTE", "TTW", "LSE", "LSW", "MAE", "MAW"}
 
 
 def _to_str(v) -> Optional[str]:
@@ -208,6 +209,10 @@ class ParamStore:
         if not meta:
             return False, "NAK_UnknownParam"
 
+        rw = (meta.get("rw") or "").strip().upper()
+        ptype = (meta.get("ptype") or "").strip().upper()
+        can_update_default = rw in ("W", "R/W") or ptype in DEVICE_PUSH_PTYPES
+
         ts = now_ts()
         with self.db._conn() as c:
             c.execute(
@@ -215,6 +220,11 @@ class ParamStore:
                 "ON CONFLICT(pkey) DO UPDATE SET value=excluded.value, updated_ts=excluded.updated_ts",
                 (pkey, str(value), ts)
             )
+            if can_update_default:
+                c.execute(
+                    "UPDATE params SET default_v=?, updated_ts=? WHERE pkey=?",
+                    (str(value), ts, pkey),
+                )
         return True, "OK"
 
     def update_meta(

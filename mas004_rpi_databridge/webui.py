@@ -331,21 +331,6 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
 
         url = cfg2.peer_base_url.rstrip("/") + "/api/inbox"
         headers = {}
-
-        if src == "raspi":
-            logs.log("raspi", "out", f"manual->mikrotom: {line}")
-            idem = outbox.enqueue("POST", url, headers, {"msg": line, "source": "raspi"}, None)
-            return {
-                "ok": True,
-                "source": src,
-                "line": line,
-                "route": "raspi->mikrotom",
-                "ack": "ACK_QUEUED",
-                "idempotency_key": idem,
-            }
-
-        logs.log(src, "out", f"manual->raspi: {line}")
-        logs.log("raspi", "in", f"{src}: {line}")
         persisted = None
         persist_msg = None
         if parsed:
@@ -358,7 +343,24 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
                 pkey = f"{ptype}{pid}"
                 persisted, persist_msg = params.apply_device_value(pkey, rhs)
                 if not persisted:
-                    logs.log("raspi", "info", f"device value not persisted for {pkey}: {persist_msg}")
+                    logs.log("raspi", "info", f"value not persisted for {pkey}: {persist_msg}")
+
+        if src == "raspi":
+            logs.log("raspi", "out", f"manual->mikrotom: {line}")
+            idem = outbox.enqueue("POST", url, headers, {"msg": line, "source": "raspi"}, None)
+            return {
+                "ok": True,
+                "source": src,
+                "line": line,
+                "route": "raspi->mikrotom",
+                "ack": "ACK_QUEUED",
+                "idempotency_key": idem,
+                "persisted_local": persisted,
+                "persist_msg": persist_msg,
+            }
+
+        logs.log(src, "out", f"manual->raspi: {line}")
+        logs.log("raspi", "in", f"{src}: {line}")
 
         idem = outbox.enqueue(
             "POST",
