@@ -334,7 +334,7 @@ class ParamStore:
         """
         Speichert einen von Device-Seite gemeldeten Wert (TTO/Laser/ESP) lokal.
         Im Unterschied zu set_value() wird rw NICHT blockiert, da ReadOnly hier nur
-        fuer Mikrotom-Schreibrechte gilt, nicht fuer eingehende Status-/Fehlermeldungen.
+        fuer Microtom-Schreibrechte gilt, nicht fuer eingehende Status-/Fehlermeldungen.
         """
         meta = self.get_meta(pkey)
         if not meta:

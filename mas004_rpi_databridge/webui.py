@@ -32,7 +32,7 @@ def require_token(x_token: Optional[str], cfg: Settings):
 
 
 class ConfigUpdate(BaseModel):
-    # Mikrotom
+    # Microtom
     peer_base_url: Optional[str] = None
     peer_watchdog_host: Optional[str] = None
     peer_health_path: Optional[str] = None
@@ -440,12 +440,12 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
                         logs.log("raspi", "info", f"value not persisted for {pkey}: {persist_msg}")
 
             if src == "raspi":
-                logs.log("raspi", "out", f"manual->mikrotom: {line}")
+                logs.log("raspi", "out", f"manual->microtom: {line}")
                 idem = outbox.enqueue("POST", url, headers, {"msg": line, "source": "raspi"}, None)
                 items.append({
                     "source": src,
                     "line": line,
-                    "route": "raspi->mikrotom",
+                    "route": "raspi->microtom",
                     "ack": "ACK_QUEUED",
                     "idempotency_key": idem,
                     "persisted_local": persisted,
@@ -462,11 +462,11 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
                 {"msg": line, "source": "raspi", "origin": src},
                 None,
             )
-            logs.log("raspi", "out", f"forward to mikrotom: {line}")
+            logs.log("raspi", "out", f"forward to microtom: {line}")
             items.append({
                 "source": src,
                 "line": line,
-                "route": f"{src}->raspi->mikrotom",
+                "route": f"{src}->raspi->microtom",
                 "ack": "ACK_QUEUED",
                 "idempotency_key": idem,
                 "persisted_local": persisted,
@@ -489,7 +489,7 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
         }
 
     # -----------------------------
-    # Inbox (receive from Mikrotom)
+    # Inbox (receive from Microtom)
     # -----------------------------
     @app.post("/api/inbox")
     async def api_inbox(
@@ -1079,7 +1079,7 @@ load();
   </fieldset>
 
   <fieldset>
-    <legend>Databridge / Mikrotom</legend>
+    <legend>Databridge / Microtom</legend>
     <div class="grid cols-3a">
       <div class="field"><label>peer_base_url</label><input id="peer_base_url"/></div>
       <div class="field"><label>peer_watchdog_host</label><input id="peer_watchdog_host"/></div>
@@ -1518,7 +1518,7 @@ reloadAll();
     <div class="grid">
       <section class="card">
         <h3>RASPI-PLC</h3>
-        <div class="muted">Manual input goes directly to Mikrotom. Multi-send: separate with comma, semicolon or new line.</div>
+        <div class="muted">Manual input goes directly to Microtom. Multi-send: separate with comma, semicolon or new line.</div>
         <div class="row" style="margin-top:8px">
           <label>ParamType hint</label>
           <input id="hint_raspi" style="width:90px" placeholder="optional" value=""/>
@@ -1539,7 +1539,7 @@ reloadAll();
 
       <section class="card">
         <h3>ESP-PLC</h3>
-        <div class="muted">Manual input goes ESP-PLC -> RASPI -> Mikrotom. Multi-send supported.</div>
+        <div class="muted">Manual input goes ESP-PLC -> RASPI -> Microtom. Multi-send supported.</div>
         <div class="row" style="margin-top:8px">
           <label>ParamType hint</label>
           <input id="hint_esp_plc" style="width:90px" value="MAS"/>
@@ -1560,7 +1560,7 @@ reloadAll();
 
       <section class="card">
         <h3>VJ3350 (Laser)</h3>
-        <div class="muted">Manual input goes VJ3350 -> RASPI -> Mikrotom. Multi-send supported.</div>
+        <div class="muted">Manual input goes VJ3350 -> RASPI -> Microtom. Multi-send supported.</div>
         <div class="row" style="margin-top:8px">
           <label>ParamType hint</label>
           <input id="hint_vj3350" style="width:90px" value="LSE"/>
@@ -1581,7 +1581,7 @@ reloadAll();
 
       <section class="card">
         <h3>VJ6530 (TTO)</h3>
-        <div class="muted">Manual input goes VJ6530 -> RASPI -> Mikrotom. Multi-send supported.</div>
+        <div class="muted">Manual input goes VJ6530 -> RASPI -> Microtom. Multi-send supported.</div>
         <div class="row" style="margin-top:8px">
           <label>ParamType hint</label>
           <input id="hint_vj6530" style="width:90px" value="TTE"/>
@@ -1686,7 +1686,7 @@ async function sendFrom(source){
     const items = Array.isArray(j.items) && j.items.length ? j.items : [j];
     for(const it of items){
       const line = it.line || msg;
-      const route = it.route || (source === "raspi" ? "raspi->mikrotom" : `${source}->raspi->mikrotom`);
+      const route = it.route || (source === "raspi" ? "raspi->microtom" : `${source}->raspi->microtom`);
       const ack = it.ack || "ACK_QUEUED";
       const idem = it.idempotency_key || "-";
       appendOutput(source, `[${ts()}] ${route}: ${line} (${ack}, idem=${idem})`);

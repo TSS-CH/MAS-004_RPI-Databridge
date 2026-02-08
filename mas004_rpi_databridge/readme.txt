@@ -19,5 +19,5 @@ http://192.168.1.100:8080/ui/params
 URL für API Doku:
 http://192.168.1.100:8080/docs
 
-Mikrotom Testtool Starten au Power Shell:
-python "D:\Users\Egli_Erwin\Veralto\DE-SMD-Support-Switzerland - Documents\26_VS_CODE\SAR41-MAS-004_Roche_LSR_TTO\Raspberry-PLC\Mikrotom-Simulator\mikrotom_sim.py"
+Microtom Testtool Starten au Power Shell:
+python "D:\Users\Egli_Erwin\Veralto\DE-SMD-Support-Switzerland - Documents\26_VS_CODE\SAR41-MAS-004_Roche_LSR_TTO\Raspberry-PLC\Microtom-Simulator\microtom_sim.py"

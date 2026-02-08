@@ -25,7 +25,7 @@ class Settings:
     eth1_gateway: str = ""
     eth0_source_ip: str = ""  # outgoing source bind for HttpClient (optional)
 
-    # Peer (Mikrotom)
+    # Peer (Microtom)
     peer_base_url: str = "http://127.0.0.1:9090"
     peer_watchdog_host: str = "127.0.0.1"
     peer_health_path: str = "/health"

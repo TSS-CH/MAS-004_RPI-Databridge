@@ -74,14 +74,14 @@ class Router:
         self.logs = logs
         self.device_bridge = DeviceBridge(cfg, params, logs)
 
-    def _enqueue_to_mikrotom(self, line: str, correlation: Optional[str] = None):
+    def _enqueue_to_microtom(self, line: str, correlation: Optional[str] = None):
         url = self.cfg.peer_base_url.rstrip("/") + "/api/inbox"
         headers = {}
         if correlation:
             headers["X-Correlation-Id"] = correlation
         self.outbox.enqueue("POST", url, headers, {"msg": line, "source": "raspi"}, None)
 
-    def handle_mikrotom_line(self, line: str, correlation: Optional[str]) -> Optional[str]:
+    def handle_microtom_line(self, line: str, correlation: Optional[str]) -> Optional[str]:
         parsed = _parse_line(line)
         if not parsed:
             return None
@@ -90,13 +90,13 @@ class Router:
         pkey = f"{ptype}{pid}"
         dev = _channel_for_ptype(ptype)
 
-        self.logs.log("raspi", "in", f"mikrotom: {line}")
+        self.logs.log("raspi", "in", f"microtom: {line}")
         self.logs.log(dev, "in", f"raspi-> {dev}: {line}")
 
         resp = self.device_bridge.execute(device=dev, pkey=pkey, ptype=ptype, op=op, value=value)
         self.logs.log(dev, "out", f"{dev}->raspi: {resp}")
-        self.logs.log("raspi", "out", f"to mikrotom: {resp}")
-        self._enqueue_to_mikrotom(resp, correlation=correlation)
+        self.logs.log("raspi", "out", f"to microtom: {resp}")
+        self._enqueue_to_microtom(resp, correlation=correlation)
         return resp
 
     def tick_once(self) -> bool:
@@ -106,12 +106,12 @@ class Router:
 
         line = _extract_msg_line(msg.body_json)
         if not line:
-            self.logs.log("raspi", "info", f"mikrotom msg id={msg.id} ohne 'msg/line/text/cmd' -> ignoriert")
+            self.logs.log("raspi", "info", f"microtom msg id={msg.id} ohne 'msg/line/text/cmd' -> ignoriert")
             self.inbox.ack(msg.id)
             return True
 
         try:
-            self.handle_mikrotom_line(line, correlation=msg.idempotency_key)
+            self.handle_microtom_line(line, correlation=msg.idempotency_key)
         except Exception as e:
             self.logs.log("raspi", "error", f"router error for inbox id={msg.id}: {repr(e)}")
         finally:
