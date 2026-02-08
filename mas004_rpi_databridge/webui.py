@@ -4,7 +4,9 @@ from fastapi import FastAPI, Request, HTTPException, Header, UploadFile, File, Q
 from fastapi.responses import HTMLResponse, Response, FileResponse
 from fastapi.openapi.docs import get_swagger_ui_html
 from pydantic import BaseModel
+from datetime import datetime
 import json
+import html
 import subprocess
 import os
 import re
@@ -214,6 +216,37 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
     def home():
         cfg2 = Settings.load(cfg_path)
         nav = nav_html("home")
+        
+        def build_home_log_panel(channel: str, title: str, limit: int = 180) -> str:
+            items = logs.list_logs(channel, limit=limit)
+            lines = []
+            for it in items:
+                ts = float(it.get("ts") or 0.0)
+                dt = datetime.fromtimestamp(ts)
+                direction = str(it.get("direction") or "").upper()
+                msg = str(it.get("message") or "")
+                if channel == "all":
+                    src = str(it.get("channel") or "")
+                    lines.append(f"[{dt:%Y-%m-%d %H:%M:%S}] [{src}] {direction} {msg}")
+                else:
+                    lines.append(f"[{dt:%Y-%m-%d %H:%M:%S}] {direction} {msg}")
+            body = "\n".join(lines) if lines else "(keine Eintraege)"
+            return (
+                '<section class="log-card">'
+                f"<h3>{html.escape(title)}</h3>"
+                f"<pre>{html.escape(body)}</pre>"
+                "</section>"
+            )
+
+        home_log_panels = "".join(
+            [
+                build_home_log_panel("all", "All Channels"),
+                build_home_log_panel("raspi", "Raspi"),
+                build_home_log_panel("esp-plc", "ESP32-PLC"),
+                build_home_log_panel("vj6530", "VJ6530 (TTO)"),
+                build_home_log_panel("vj3350", "VJ3350 (Laser)"),
+            ]
+        )
         return f"""
 <!doctype html>
 <html>
@@ -228,7 +261,12 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
     .navbtn.active{{background:#005eb8; color:#fff; border-color:#005eb8}}
     .card{{background:#fff; border:1px solid #d6dde7; border-radius:10px; padding:14px}}
     .grid{{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px}}
+    .logs-grid{{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:10px}}
+    .log-card{{border:1px solid #d6dde7; border-radius:10px; background:#fbfdff; padding:10px}}
+    .log-card h3{{margin:0 0 8px 0; font-size:15px}}
+    .log-card pre{{margin:0; background:#f7faff; border:1px solid #d6dde7; border-radius:8px; padding:8px; max-height:280px; overflow:auto; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.35; font-family:Consolas, "Courier New", monospace}}
     @media(max-width:900px){{.grid{{grid-template-columns:1fr;}}}}
+    @media(max-width:1100px){{.logs-grid{{grid-template-columns:1fr;}}}}
   </style>
 </head>
 <body>
@@ -243,6 +281,12 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
         <div><b>Inbox pending</b>: {inbox.count_pending()}</div>
         <div><b>Peer</b>: {cfg2.peer_base_url}</div>
         <div><b>Watchdog host</b>: {cfg2.peer_watchdog_host}</div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px;">
+      <h2>Logs (Read-only)</h2>
+      <div class="logs-grid">
+        {home_log_panels}
       </div>
     </div>
   </div>
@@ -1030,7 +1074,6 @@ load();
     <div class="actions">
       <button onclick="saveToken()">Save</button>
       <span id="tokstate" class="pill"></span>
-      <a href="/" style="margin-left:4px">Home</a>
     </div>
   </div>
 
@@ -1465,7 +1508,6 @@ reloadAll();
     body{margin:0; font-family:Segoe UI,Arial,sans-serif; background:var(--bg); color:var(--text)}
     .wrap{max-width:1500px; margin:0 auto; padding:16px}
     .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-    .top{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px}
     .topnav{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}
     .navbtn{padding:8px 12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:#1f2933; text-decoration:none}
     .navbtn.active{background:#005eb8; color:#fff; border-color:#005eb8}
@@ -1499,14 +1541,6 @@ reloadAll();
 <body>
   <div class="wrap">
     __NAV__
-    <div class="top row">
-      <label>UI Token:</label>
-      <input id="token" style="width:360px" placeholder="MAS004-..."/>
-      <button onclick="saveToken()">Save Token</button>
-      <button onclick="reloadAll()">Reload All Logs</button>
-      <span id="tokstate" class="pill">no token</span>
-      <a href="/" style="margin-left:auto">Home</a>
-    </div>
 
     <div class="grid">
       <section class="card">
@@ -1608,28 +1642,12 @@ function cookieGet(name){
   const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[-.$?*|{}()\\[\\]\\\\\\/\\+^]/g,'\\\\$&') + '=([^;]*)'));
   return m ? decodeURIComponent(m[1]) : "";
 }
-function cookieSet(name, value, days){
-  const d = new Date();
-  d.setTime(d.getTime() + (days*24*60*60*1000));
-  document.cookie = `${name}=${encodeURIComponent(value)}; expires=${d.toUTCString()}; path=/; SameSite=Lax`;
-}
 function getToken(){
   try{
     return localStorage.getItem(TOKEN_KEY) || cookieGet(TOKEN_KEY) || "";
   }catch(e){
     return cookieGet(TOKEN_KEY) || "";
   }
-}
-function saveToken(){
-  const v = el("token").value.trim();
-  try{ localStorage.setItem(TOKEN_KEY, v); }catch(e){}
-  cookieSet(TOKEN_KEY, v, 3650);
-  showTok();
-}
-function showTok(){
-  const t = getToken();
-  el("token").value = t;
-  el("tokstate").textContent = t ? "token ok" : "no token";
 }
 async function api(path, opt={}){
   opt.headers = opt.headers || {};
@@ -1755,7 +1773,6 @@ function startAutoLogRefresh(){
   }, AUTO_LOG_MS);
 }
 
-showTok();
 reloadAll();
 startAutoLogRefresh();
 document.addEventListener("visibilitychange", () => {
