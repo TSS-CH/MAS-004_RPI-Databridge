@@ -47,12 +47,16 @@ class Settings:
     # ESP-PLC (HTTP)
     esp_host: str = ""
     esp_port: int = 0
+    esp_simulation: bool = True
+    esp_watchdog_host: str = ""
 
     # Printers
     vj3350_host: str = ""
     vj3350_port: int = 0
+    vj3350_simulation: bool = True
     vj6530_host: str = ""
     vj6530_port: int = 0
+    vj6530_simulation: bool = True
 
     # UI/API auth
     ui_token: str = "change-me"

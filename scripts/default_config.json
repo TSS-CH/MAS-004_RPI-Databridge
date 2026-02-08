@@ -15,5 +15,9 @@
   "tls_verify": true,
   "retry_base_s": 1.0,
   "retry_cap_s": 60.0,
+  "esp_simulation": true,
+  "esp_watchdog_host": "",
+  "vj3350_simulation": true,
+  "vj6530_simulation": true,
   "ui_token": "change-me"
 }

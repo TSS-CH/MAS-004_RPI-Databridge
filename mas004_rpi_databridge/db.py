@@ -65,6 +65,22 @@ CREATE TABLE IF NOT EXISTS param_values (
   updated_ts REAL NOT NULL,
   FOREIGN KEY(pkey) REFERENCES params(pkey) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS param_device_map (
+  pkey TEXT PRIMARY KEY,
+  esp_key TEXT,
+  zbc_message_id INTEGER,
+  zbc_command_id INTEGER,
+  zbc_value_codec TEXT,
+  zbc_scale REAL,
+  zbc_offset REAL,
+  ultimate_set_cmd TEXT,
+  ultimate_get_cmd TEXT,
+  ultimate_var_name TEXT,
+  updated_ts REAL NOT NULL,
+  FOREIGN KEY(pkey) REFERENCES params(pkey) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_param_device_map_zbc ON param_device_map(zbc_message_id, zbc_command_id);
 """
 
 _init_lock = threading.Lock()

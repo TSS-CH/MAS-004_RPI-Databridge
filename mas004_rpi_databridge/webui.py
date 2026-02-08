@@ -45,10 +45,14 @@ class ConfigUpdate(BaseModel):
     # device endpoints
     esp_host: Optional[str] = None
     esp_port: Optional[int] = None
+    esp_simulation: Optional[bool] = None
+    esp_watchdog_host: Optional[str] = None
     vj3350_host: Optional[str] = None
     vj3350_port: Optional[int] = None
+    vj3350_simulation: Optional[bool] = None
     vj6530_host: Optional[str] = None
     vj6530_port: Optional[int] = None
+    vj6530_simulation: Optional[bool] = None
 
 
 class NetworkUpdate(BaseModel):
@@ -245,9 +249,14 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
             "inbox_pending": inbox.count_pending(),
             "peer_base_url": cfg2.peer_base_url,
             "devices": {
-                "esp": {"host": cfg2.esp_host, "port": cfg2.esp_port},
-                "vj3350": {"host": cfg2.vj3350_host, "port": cfg2.vj3350_port},
-                "vj6530": {"host": cfg2.vj6530_host, "port": cfg2.vj6530_port},
+                "esp": {
+                    "host": cfg2.esp_host,
+                    "port": cfg2.esp_port,
+                    "simulation": cfg2.esp_simulation,
+                    "watchdog_host": cfg2.esp_watchdog_host,
+                },
+                "vj3350": {"host": cfg2.vj3350_host, "port": cfg2.vj3350_port, "simulation": cfg2.vj3350_simulation},
+                "vj6530": {"host": cfg2.vj6530_host, "port": cfg2.vj6530_port, "simulation": cfg2.vj6530_simulation},
             }
         }
 
@@ -941,14 +950,18 @@ load();
     <div class="row">
       <label>ESP host</label><input id="esp_host" style="width:160px"/>
       <label>ESP port</label><input id="esp_port" style="width:80px"/>
+      <label>ESP watchdog host</label><input id="esp_watchdog_host" style="width:180px" placeholder="leer = esp_host"/>
+      <label><input type="checkbox" id="esp_simulation"/> Simulation</label>
     </div>
     <div class="row">
       <label>VJ3350 host</label><input id="vj3350_host" style="width:160px"/>
       <label>VJ3350 port</label><input id="vj3350_port" style="width:80px"/>
+      <label><input type="checkbox" id="vj3350_simulation"/> Simulation</label>
     </div>
     <div class="row">
       <label>VJ6530 host</label><input id="vj6530_host" style="width:160px"/>
       <label>VJ6530 port</label><input id="vj6530_port" style="width:80px"/>
+      <label><input type="checkbox" id="vj6530_simulation"/> Simulation</label>
     </div>
     <div class="row">
       <button onclick="saveDevices()">Save Devices + Restart</button>
@@ -1078,10 +1091,14 @@ async function reloadAll(){
 
   document.getElementById("esp_host").value = c.esp_host || "";
   document.getElementById("esp_port").value = c.esp_port ?? "";
+  document.getElementById("esp_watchdog_host").value = c.esp_watchdog_host || "";
+  document.getElementById("esp_simulation").checked = !!c.esp_simulation;
   document.getElementById("vj3350_host").value = c.vj3350_host || "";
   document.getElementById("vj3350_port").value = c.vj3350_port ?? "";
+  document.getElementById("vj3350_simulation").checked = !!c.vj3350_simulation;
   document.getElementById("vj6530_host").value = c.vj6530_host || "";
   document.getElementById("vj6530_port").value = c.vj6530_port ?? "";
+  document.getElementById("vj6530_simulation").checked = !!c.vj6530_simulation;
 
   // network
   const net = await api("/api/system/network");
@@ -1154,10 +1171,14 @@ async function saveDevices(){
   const payload = {
     esp_host: document.getElementById("esp_host").value.trim(),
     esp_port: Number(document.getElementById("esp_port").value.trim()),
+    esp_watchdog_host: document.getElementById("esp_watchdog_host").value.trim(),
+    esp_simulation: document.getElementById("esp_simulation").checked,
     vj3350_host: document.getElementById("vj3350_host").value.trim(),
     vj3350_port: Number(document.getElementById("vj3350_port").value.trim()),
+    vj3350_simulation: document.getElementById("vj3350_simulation").checked,
     vj6530_host: document.getElementById("vj6530_host").value.trim(),
-    vj6530_port: Number(document.getElementById("vj6530_port").value.trim())
+    vj6530_port: Number(document.getElementById("vj6530_port").value.trim()),
+    vj6530_simulation: document.getElementById("vj6530_simulation").checked
   };
   await api("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)});
   document.getElementById("dev_status").textContent = "saved (service restarted)";

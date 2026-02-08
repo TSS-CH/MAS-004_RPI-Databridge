@@ -1,6 +1,6 @@
 import io
 import re
-from typing import Optional, Dict, Any, Tuple, List
+from typing import Optional, Dict, Any, Tuple
 
 import openpyxl
 
@@ -18,11 +18,33 @@ def _to_str(v) -> Optional[str]:
     return str(v)
 
 
+def _to_clean_str(v) -> Optional[str]:
+    s = _to_str(v)
+    if s is None:
+        return None
+    s = s.strip()
+    return s if s else None
+
+
 def _to_float(v) -> Optional[float]:
     if v is None:
         return None
     try:
         return float(v)
+    except Exception:
+        return None
+
+
+def _to_int(v) -> Optional[int]:
+    if v is None:
+        return None
+    s = _to_clean_str(v)
+    if not s:
+        return None
+    try:
+        if s.lower().startswith("0x"):
+            return int(s, 16)
+        return int(float(s))
     except Exception:
         return None
 
@@ -67,20 +89,46 @@ class ParamStore:
             return None
 
         c_type = col_any("Params_Type.", "Params_Type.:", "Params Type", "Params_Type")
-        c_id   = col_any("Param ID.", "Param. ID.:", "Param. ID.", "Param ID", "Param_ID", "Param. ID")
+        c_id = col_any("Param ID.", "Param. ID.:", "Param. ID.", "Param ID", "Param_ID", "Param. ID")
 
-        c_min   = col_any("Min.", "Min.:", "Min")
-        c_max   = col_any("Max.", "Max.:", "Max")
-        c_def   = col_any("Default Value", "Default Value:", "Default")
-        c_unit  = col_any("Einheit", "Unit")
-        c_rw    = col_any("R/W:", "R/W", "RW", "R_W")
+        c_min = col_any("Min.", "Min.:", "Min")
+        c_max = col_any("Max.", "Max.:", "Max")
+        c_def = col_any("Default Value", "Default Value:", "Default")
+        c_unit = col_any("Einheit", "Unit")
+        c_rw = col_any("R/W:", "R/W", "RW", "R_W")
         c_dtype = col_any("Data Type", "DataType", "Datatype")
-        c_name  = col_any("Name")
-        c_fmt   = col_any("Format relevant?", "Format relevant", "Format")
-        c_msg   = col_any("Message")
+        c_name = col_any("Name")
+        c_fmt = col_any("Format relevant?", "Format relevant", "Format")
+        c_msg = col_any("Message")
         c_cause = col_any("Possible Cause", "Possible cause")
-        c_eff   = col_any("Effects", "Effect")
-        c_rem   = col_any("Remedy")
+        c_eff = col_any("Effects", "Effect")
+        c_rem = col_any("Remedy")
+
+        # Optional mapping columns for live device protocols.
+        c_esp_key = col_any("ESP Key", "ESP_Key", "ESP Param", "ESP Parameter")
+        c_zbc_msg_id = col_any("VJ6530 Msg ID", "VJ6530 Message ID", "ZBC Message ID", "ZBC Msg ID")
+        c_zbc_cmd_id = col_any("VJ6530 Cmd ID", "VJ6530 Command ID", "ZBC Command ID", "ZBC Cmd ID")
+        c_zbc_codec = col_any("VJ6530 Codec", "ZBC Codec", "ZBC Value Codec")
+        c_zbc_scale = col_any("VJ6530 Scale", "ZBC Scale")
+        c_zbc_offset = col_any("VJ6530 Offset", "ZBC Offset")
+        c_ult_set = col_any("VJ3350 Set Cmd", "Ultimate Set Cmd", "Ultimate Set Command")
+        c_ult_get = col_any("VJ3350 Get Cmd", "Ultimate Get Cmd", "Ultimate Get Command")
+        c_ult_var = col_any("VJ3350 Var", "Ultimate Var", "Ultimate Variable")
+
+        has_map_cols = any(
+            c is not None
+            for c in (
+                c_esp_key,
+                c_zbc_msg_id,
+                c_zbc_cmd_id,
+                c_zbc_codec,
+                c_zbc_scale,
+                c_zbc_offset,
+                c_ult_set,
+                c_ult_get,
+                c_ult_var,
+            )
+        )
 
         if not c_type or not c_id:
             raise RuntimeError(
@@ -90,7 +138,7 @@ class ParamStore:
 
         with self.db._conn() as c:
             for r in range(2, ws.max_row + 1):
-                ptype = (_to_str(ws.cell(r, c_type).value) or "").strip()
+                ptype = (_to_str(ws.cell(r, c_type).value) or "").strip().upper()
                 pid = (_to_str(ws.cell(r, c_id).value) or "").strip()
 
                 if not ptype and not pid:
@@ -124,7 +172,7 @@ class ParamStore:
                            name=?, format_relevant=?, message=?, possible_cause=?, effects=?, remedy=?,
                            updated_ts=?
                            WHERE pkey=?""",
-                        (ptype, pid, min_v, max_v, default_v, unit, rw, dtype, name, fmt, msg, cause, eff, rem, ts, pkey)
+                        (ptype, pid, min_v, max_v, default_v, unit, rw, dtype, name, fmt, msg, cause, eff, rem, ts, pkey),
                     )
                     updated += 1
                 else:
@@ -134,9 +182,59 @@ class ParamStore:
                            message,possible_cause,effects,remedy,updated_ts
                            )
                            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                        (pkey, ptype, pid, min_v, max_v, default_v, unit, rw, dtype, name, fmt, msg, cause, eff, rem, ts)
+                        (pkey, ptype, pid, min_v, max_v, default_v, unit, rw, dtype, name, fmt, msg, cause, eff, rem, ts),
                     )
                     inserted += 1
+
+                if has_map_cols:
+                    map_row = {
+                        "esp_key": _to_clean_str(ws.cell(r, c_esp_key).value) if c_esp_key else None,
+                        "zbc_message_id": _to_int(ws.cell(r, c_zbc_msg_id).value) if c_zbc_msg_id else None,
+                        "zbc_command_id": _to_int(ws.cell(r, c_zbc_cmd_id).value) if c_zbc_cmd_id else None,
+                        "zbc_value_codec": _to_clean_str(ws.cell(r, c_zbc_codec).value) if c_zbc_codec else None,
+                        "zbc_scale": _to_float(ws.cell(r, c_zbc_scale).value) if c_zbc_scale else None,
+                        "zbc_offset": _to_float(ws.cell(r, c_zbc_offset).value) if c_zbc_offset else None,
+                        "ultimate_set_cmd": _to_clean_str(ws.cell(r, c_ult_set).value) if c_ult_set else None,
+                        "ultimate_get_cmd": _to_clean_str(ws.cell(r, c_ult_get).value) if c_ult_get else None,
+                        "ultimate_var_name": _to_clean_str(ws.cell(r, c_ult_var).value) if c_ult_var else None,
+                    }
+                    has_any_map = any(v is not None for v in map_row.values())
+
+                    if has_any_map:
+                        c.execute(
+                            """INSERT INTO param_device_map(
+                               pkey, esp_key, zbc_message_id, zbc_command_id, zbc_value_codec,
+                               zbc_scale, zbc_offset, ultimate_set_cmd, ultimate_get_cmd,
+                               ultimate_var_name, updated_ts
+                               )
+                               VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                               ON CONFLICT(pkey) DO UPDATE SET
+                                 esp_key=excluded.esp_key,
+                                 zbc_message_id=excluded.zbc_message_id,
+                                 zbc_command_id=excluded.zbc_command_id,
+                                 zbc_value_codec=excluded.zbc_value_codec,
+                                 zbc_scale=excluded.zbc_scale,
+                                 zbc_offset=excluded.zbc_offset,
+                                 ultimate_set_cmd=excluded.ultimate_set_cmd,
+                                 ultimate_get_cmd=excluded.ultimate_get_cmd,
+                                 ultimate_var_name=excluded.ultimate_var_name,
+                                 updated_ts=excluded.updated_ts""",
+                            (
+                                pkey,
+                                map_row["esp_key"],
+                                map_row["zbc_message_id"],
+                                map_row["zbc_command_id"],
+                                map_row["zbc_value_codec"],
+                                map_row["zbc_scale"],
+                                map_row["zbc_offset"],
+                                map_row["ultimate_set_cmd"],
+                                map_row["ultimate_get_cmd"],
+                                map_row["ultimate_var_name"],
+                                ts,
+                            ),
+                        )
+                    else:
+                        c.execute("DELETE FROM param_device_map WHERE pkey=?", (pkey,))
 
         return {"ok": True, "inserted": inserted, "updated": updated, "skipped": skipped}
 
@@ -145,11 +243,37 @@ class ParamStore:
             row = c.execute(
                 """SELECT pkey,ptype,pid,min_v,max_v,default_v,unit,rw,dtype,name,format_relevant,message
                    FROM params WHERE pkey=?""",
-                (pkey,)
+                (pkey,),
             ).fetchone()
         if not row:
             return None
-        keys = ["pkey","ptype","pid","min_v","max_v","default_v","unit","rw","dtype","name","format_relevant","message"]
+        keys = ["pkey", "ptype", "pid", "min_v", "max_v", "default_v", "unit", "rw", "dtype", "name", "format_relevant", "message"]
+        return dict(zip(keys, row))
+
+    def get_device_map(self, pkey: str) -> Dict[str, Any]:
+        with self.db._conn() as c:
+            row = c.execute(
+                """SELECT esp_key,zbc_message_id,zbc_command_id,zbc_value_codec,zbc_scale,zbc_offset,
+                          ultimate_set_cmd,ultimate_get_cmd,ultimate_var_name
+                   FROM param_device_map
+                   WHERE pkey=?""",
+                (pkey,),
+            ).fetchone()
+
+        if not row:
+            return {}
+
+        keys = [
+            "esp_key",
+            "zbc_message_id",
+            "zbc_command_id",
+            "zbc_value_codec",
+            "zbc_scale",
+            "zbc_offset",
+            "ultimate_set_cmd",
+            "ultimate_get_cmd",
+            "ultimate_var_name",
+        ]
         return dict(zip(keys, row))
 
     def get_value(self, pkey: str) -> Optional[str]:
@@ -165,7 +289,7 @@ class ParamStore:
         dv = (meta or {}).get("default_v")
         return dv if dv is not None else "0"
 
-    def set_value(self, pkey: str, value: str) -> Tuple[bool, str]:
+    def validate_write(self, pkey: str, value: str) -> Tuple[bool, str]:
         meta = self.get_meta(pkey)
         if not meta:
             return False, "NAK_UnknownParam"
@@ -183,14 +307,21 @@ class ParamStore:
             if max_v is not None and fv > float(max_v):
                 return False, "NAK_OutOfRange"
         except Exception:
+            # non-numeric values are allowed when no numeric bounds are enforced
             pass
+        return True, "OK"
+
+    def set_value(self, pkey: str, value: str) -> Tuple[bool, str]:
+        ok, msg = self.validate_write(pkey, value)
+        if not ok:
+            return ok, msg
 
         ts = now_ts()
         with self.db._conn() as c:
             c.execute(
                 "INSERT INTO param_values(pkey,value,updated_ts) VALUES(?,?,?) "
                 "ON CONFLICT(pkey) DO UPDATE SET value=excluded.value, updated_ts=excluded.updated_ts",
-                (pkey, str(value), ts)
+                (pkey, str(value), ts),
             )
             # Fuer den Testbetrieb soll ein erfolgreiches Write auch den Default-Wert fortschreiben.
             c.execute(
@@ -218,7 +349,7 @@ class ParamStore:
             c.execute(
                 "INSERT INTO param_values(pkey,value,updated_ts) VALUES(?,?,?) "
                 "ON CONFLICT(pkey) DO UPDATE SET value=excluded.value, updated_ts=excluded.updated_ts",
-                (pkey, str(value), ts)
+                (pkey, str(value), ts),
             )
             if can_update_default:
                 c.execute(
@@ -274,7 +405,7 @@ class ParamStore:
                 """UPDATE params
                    SET default_v=?, min_v=?, max_v=?, rw=?, updated_ts=?
                    WHERE pkey=?""",
-                (new_def, new_min, new_max, new_rw, now_ts(), pkey)
+                (new_def, new_min, new_max, new_rw, now_ts(), pkey),
             )
         return True, "OK"
 
@@ -285,19 +416,22 @@ class ParamStore:
         args = []
 
         if ptype:
-            where.append("ptype=?")
+            where.append("p.ptype=?")
             args.append(ptype)
 
         if q:
             q2 = f"%{q}%"
-            where.append("(pkey LIKE ? OR name LIKE ? OR message LIKE ?)")
+            where.append("(p.pkey LIKE ? OR p.name LIKE ? OR p.message LIKE ?)")
             args.extend([q2, q2, q2])
 
         wsql = ("WHERE " + " AND ".join(where)) if where else ""
-        sql = f"""SELECT pkey,ptype,pid,min_v,max_v,default_v,unit,rw,dtype,name,message
-                  FROM params
+        sql = f"""SELECT p.pkey,p.ptype,p.pid,p.min_v,p.max_v,p.default_v,p.unit,p.rw,p.dtype,p.name,p.message,
+                         m.esp_key,m.zbc_message_id,m.zbc_command_id,m.zbc_value_codec,m.zbc_scale,m.zbc_offset,
+                         m.ultimate_set_cmd,m.ultimate_get_cmd,m.ultimate_var_name
+                  FROM params p
+                  LEFT JOIN param_device_map m ON m.pkey = p.pkey
                   {wsql}
-                  ORDER BY ptype ASC, pid ASC
+                  ORDER BY p.ptype ASC, p.pid ASC
                   LIMIT ? OFFSET ?"""
         args.extend([limit, offset])
 
@@ -309,21 +443,32 @@ class ParamStore:
             pkey = r[0]
             cur = self.get_value(pkey)
             eff = cur if cur is not None else (r[5] if r[5] is not None else "0")
-            out.append({
-                "pkey": r[0],
-                "ptype": r[1],
-                "pid": r[2],
-                "min_v": r[3],
-                "max_v": r[4],
-                "default_v": r[5],
-                "current_v": cur,
-                "effective_v": eff,
-                "unit": r[6],
-                "rw": r[7],
-                "dtype": r[8],
-                "name": r[9],
-                "message": r[10],
-            })
+            out.append(
+                {
+                    "pkey": r[0],
+                    "ptype": r[1],
+                    "pid": r[2],
+                    "min_v": r[3],
+                    "max_v": r[4],
+                    "default_v": r[5],
+                    "current_v": cur,
+                    "effective_v": eff,
+                    "unit": r[6],
+                    "rw": r[7],
+                    "dtype": r[8],
+                    "name": r[9],
+                    "message": r[10],
+                    "esp_key": r[11],
+                    "zbc_message_id": r[12],
+                    "zbc_command_id": r[13],
+                    "zbc_value_codec": r[14],
+                    "zbc_scale": r[15],
+                    "zbc_offset": r[16],
+                    "ultimate_set_cmd": r[17],
+                    "ultimate_get_cmd": r[18],
+                    "ultimate_var_name": r[19],
+                }
+            )
         return out
 
     def export_xlsx_bytes(self, ptype: Optional[str] = None, q: Optional[str] = None) -> bytes:
@@ -346,24 +491,44 @@ class ParamStore:
             "Data Type",
             "Name",
             "Message",
+            "ESP Key",
+            "VJ6530 Msg ID",
+            "VJ6530 Cmd ID",
+            "VJ6530 Codec",
+            "VJ6530 Scale",
+            "VJ6530 Offset",
+            "VJ3350 Set Cmd",
+            "VJ3350 Get Cmd",
+            "VJ3350 Var",
         ]
         ws.append(headers)
 
         for r in rows:
-            ws.append([
-                r.get("ptype"),
-                r.get("pid"),
-                r.get("min_v"),
-                r.get("max_v"),
-                r.get("default_v"),
-                r.get("current_v"),
-                r.get("effective_v"),
-                r.get("unit"),
-                r.get("rw"),
-                r.get("dtype"),
-                r.get("name"),
-                r.get("message"),
-            ])
+            ws.append(
+                [
+                    r.get("ptype"),
+                    r.get("pid"),
+                    r.get("min_v"),
+                    r.get("max_v"),
+                    r.get("default_v"),
+                    r.get("current_v"),
+                    r.get("effective_v"),
+                    r.get("unit"),
+                    r.get("rw"),
+                    r.get("dtype"),
+                    r.get("name"),
+                    r.get("message"),
+                    r.get("esp_key"),
+                    r.get("zbc_message_id"),
+                    r.get("zbc_command_id"),
+                    r.get("zbc_value_codec"),
+                    r.get("zbc_scale"),
+                    r.get("zbc_offset"),
+                    r.get("ultimate_set_cmd"),
+                    r.get("ultimate_get_cmd"),
+                    r.get("ultimate_var_name"),
+                ]
+            )
 
         bio = io.BytesIO()
         wb.save(bio)

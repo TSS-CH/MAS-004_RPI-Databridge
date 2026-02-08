@@ -32,10 +32,14 @@
 
   "esp_host": "192.168.2.10",
   "esp_port": 5000,
+  "esp_watchdog_host": "192.168.2.10",
+  "esp_simulation": true,
 
   "vj3350_host": "192.168.2.20",
   "vj3350_port": 20000,
+  "vj3350_simulation": true,
 
   "vj6530_host": "192.168.2.30",
-  "vj6530_port": 3007
+  "vj6530_port": 3007,
+  "vj6530_simulation": true
 }
