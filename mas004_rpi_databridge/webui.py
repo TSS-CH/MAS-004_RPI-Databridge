@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any
 
 from fastapi import FastAPI, Request, HTTPException, Header, UploadFile, File, Query
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, FileResponse
 from fastapi.openapi.docs import get_swagger_ui_html
 from pydantic import BaseModel
 import json
@@ -19,6 +19,9 @@ from mas004_rpi_databridge.params import ParamStore
 from mas004_rpi_databridge.logstore import LogStore
 from mas004_rpi_databridge.netconfig import IfaceCfg, apply_static, get_current_ip_info
 from mas004_rpi_databridge.protocol import normalize_pid
+
+ASSET_DIR = os.path.join(os.path.dirname(__file__), "assets")
+VIDEOJET_LOGO_PATH = os.path.join(ASSET_DIR, "videojet-logo.jpg")
 
 
 def require_token(x_token: Optional[str], cfg: Settings):
@@ -143,14 +146,8 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
 
     def logo_html() -> str:
         return """
-<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px;">
-  <div style="display:flex; align-items:center; gap:10px;">
-    <svg width="360" height="72" viewBox="0 0 720 144" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="VIDEOJET">
-      <path d="M12 72 C60 24, 145 16, 228 45 L148 45 C102 36, 56 45, 20 74 Z" fill="#0EA5E9"/>
-      <path d="M18 86 C70 122, 152 130, 232 104 L154 104 C101 113, 57 107, 18 86 Z" fill="#0EA5E9"/>
-      <text x="246" y="102" font-family="Segoe UI, Arial, sans-serif" font-style="italic" font-weight="900" font-size="98" fill="#111111">VIDEOJET</text>
-    </svg>
-  </div>
+<div style="display:flex; align-items:center; justify-content:flex-start; margin-bottom:10px;">
+  <img src="/ui/assets/videojet-logo.jpg" alt="Videojet" style="display:block; height:72px; width:auto; max-width:100%; object-fit:contain;"/>
 </div>
 """
 
@@ -167,6 +164,12 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
             cls = "navbtn active" if key == active else "navbtn"
             links.append(f'<a class="{cls}" href="{href}">{label}</a>')
         return logo_html() + '<nav class="topnav">' + "".join(links) + "</nav>"
+
+    @app.get("/ui/assets/videojet-logo.jpg", include_in_schema=False)
+    def ui_logo_asset():
+        if not os.path.exists(VIDEOJET_LOGO_PATH):
+            raise HTTPException(status_code=404, detail="Logo asset missing")
+        return FileResponse(VIDEOJET_LOGO_PATH, media_type="image/jpeg")
 
     # -----------------------------
     # Home
@@ -1367,7 +1370,7 @@ reloadAll();
 <html>
 <head>
   <meta charset="utf-8"/>
-  <title>MAS-004 Test UI</title>
+  <title>MAS-004</title>
   <style>
     :root{
       --bg:#f4f6f9;
@@ -1415,7 +1418,6 @@ reloadAll();
 </head>
 <body>
   <div class="wrap">
-    <h2>MAS-004 Test UI</h2>
     __NAV__
     <div class="top row">
       <label>UI Token:</label>
@@ -1687,5 +1689,4 @@ document.addEventListener("visibilitychange", () => {
 """.replace("__NAV__", nav)
 
     return app
-
 
