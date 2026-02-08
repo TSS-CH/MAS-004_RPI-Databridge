@@ -910,6 +910,7 @@ load();
     --radius:10px;
     --shadow:none;
   }
+  *, *::before, *::after{box-sizing:border-box;}
   body{
     margin:0;
     font-family:Segoe UI,Arial,sans-serif;
@@ -917,13 +918,13 @@ load();
     color:var(--text);
   }
   .wrap{max-width:1240px; margin:0 auto; padding:16px}
-  .grid{display:grid; gap:12px; align-items:end; margin-bottom:10px;}
-  .token-grid{grid-template-columns:minmax(320px,1fr) auto;}
-  .cols-4{grid-template-columns:minmax(180px,1.4fr) minmax(160px,1.1fr) minmax(90px,.7fr) minmax(180px,1.2fr);}
-  .cols-3a{grid-template-columns:minmax(340px,2fr) minmax(170px,1fr) minmax(150px,.8fr);}
-  .cols-3b{grid-template-columns:minmax(110px,.8fr) minmax(120px,.8fr) minmax(180px,1.3fr);}
-  .cols-device{grid-template-columns:minmax(220px,1.7fr) minmax(110px,.8fr) minmax(220px,1.5fr) auto;}
-  .cols-log{grid-template-columns:repeat(4,minmax(120px,1fr));}
+  .grid{display:grid; gap:12px; align-items:end; justify-content:start; margin-bottom:10px;}
+  .token-grid{grid-template-columns:minmax(320px,760px) auto;}
+  .cols-4{grid-template-columns:220px 220px 110px 220px;}
+  .cols-3a{grid-template-columns:640px 220px 200px;}
+  .cols-3b{grid-template-columns:160px 160px 260px;}
+  .cols-device{grid-template-columns:260px 130px 260px auto;}
+  .cols-log{grid-template-columns:180px 180px 180px 180px;}
   .field{display:flex; flex-direction:column; gap:4px; min-width:0;}
   .field label{font-size:12px; color:var(--muted); font-weight:600;}
   .field.empty{visibility:hidden;}
@@ -988,7 +989,21 @@ load();
     margin:12px 0;
   }
   legend{padding:0 6px; font-weight:600;}
-  pre{background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px; overflow:auto;}
+  pre{
+    background:#f8fafc;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:10px;
+    overflow:auto;
+    white-space:pre-wrap;
+    word-break:break-word;
+    max-width:100%;
+  }
+  @media(max-width:1360px){
+    .token-grid,.cols-4,.cols-3a,.cols-3b,.cols-device,.cols-log{
+      grid-template-columns:repeat(2,minmax(220px,1fr));
+    }
+  }
   @media(max-width:1100px){
     .token-grid,.cols-4,.cols-3a,.cols-3b,.cols-device,.cols-log{grid-template-columns:1fr;}
   }
