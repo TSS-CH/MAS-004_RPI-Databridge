@@ -664,17 +664,25 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
     body{font-family:Segoe UI,Arial,sans-serif; margin:0; background:#f4f6f9; color:#1f2933}
     .wrap{max-width:1200px; margin:0 auto; padding:16px}
     .topnav{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}
-    .navbtn{padding:8px 12px; border:1px solid #d6dde7; border-radius:8px; background:#fff; color:#1f2933; text-decoration:none}
+    .navbtn{padding:8px 12px; border:1px solid #c2d2e4; border-radius:8px; background:#e8f0f8; color:#1f2933; text-decoration:none}
     .navbtn.active{background:#005eb8; color:#fff; border-color:#005eb8}
     .card{background:#fff; border:1px solid #d6dde7; border-radius:10px; padding:14px}
+    .row{display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; margin-bottom:10px}
+    .field{display:flex; flex-direction:column; gap:4px; min-width:140px; flex:0 1 180px}
+    .field.grow{flex:1 1 320px}
+    .field.small{flex:0 1 140px}
+    .actions{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+    .field label{font-size:12px; color:#5f6b7a; font-weight:600}
+    input{padding:9px 10px; margin:0; border:1px solid #c8d6e5; border-radius:10px; background:#fff; min-height:38px; box-sizing:border-box}
+    input[type=file]{padding:7px 9px; background:#f5f8fc}
     table{border-collapse:collapse; width:100%}
-    th,td{border:1px solid #ddd; padding:6px; font-size:13px}
-    th{background:#f3f3f3; position:sticky; top:0}
-    input{padding:6px; margin:4px}
-    .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
-    .btn{padding:7px 10px; cursor:pointer}
+    th,td{border:1px solid #dbe2ea; padding:6px; font-size:13px}
+    th{background:#f3f6fa; position:sticky; top:0}
+    .btn{padding:9px 12px; border-radius:10px; border:1px solid #b9cde3; background:#e8f0f8; color:#17324b; font-weight:600; cursor:pointer}
+    .btn:hover{background:#dce8f5}
+    .btn:active{background:#cfe0f1}
     .muted{color:#666}
-    .pill{padding:2px 6px; border:1px solid #aaa; border-radius:10px; font-size:12px}
+    .pill{padding:4px 8px; border:1px solid #b6c5d6; border-radius:999px; font-size:12px; background:#eef3f8}
   </style>
 </head>
 <body>
@@ -685,25 +693,37 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
   <p class="muted">Token wird im Browser gespeichert (localStorage). Export/Import/Edit braucht X-Token.</p>
 
   <div class="row">
-    <label>UI Token:</label>
-    <input id="token" style="width:420px" placeholder="MAS004-..."/>
-    <button class="btn" onclick="saveToken()">Save</button>
-    <span id="tokstate" class="pill"></span>
+    <div class="field grow">
+      <label>UI Token</label>
+      <input id="token" placeholder="MAS004-..."/>
+    </div>
+    <div class="actions">
+      <button class="btn" onclick="saveToken()">Save</button>
+      <span id="tokstate" class="pill"></span>
+    </div>
   </div>
 
   <hr/>
 
   <div class="row">
-    <input id="q" style="width:280px" placeholder="Suche (pkey/name/message)"/>
-    <input id="ptype" style="width:120px" placeholder="ptype (z.B. TTP)"/>
-    <button class="btn" onclick="load()">Reload</button>
-
-    <button class="btn" onclick="exportXlsx()">Export XLSX</button>
-
-    <input type="file" id="file" accept=".xlsx"/>
-    <button class="btn" onclick="importXlsx()">Import XLSX</button>
-
-    <span id="status" class="muted"></span>
+    <div class="field grow">
+      <label>Suche</label>
+      <input id="q" placeholder="pkey / name / message"/>
+    </div>
+    <div class="field small">
+      <label>ParamType</label>
+      <input id="ptype" placeholder="z.B. TTP"/>
+    </div>
+    <div class="field grow">
+      <label>Excel Import (.xlsx)</label>
+      <input type="file" id="file" accept=".xlsx"/>
+    </div>
+    <div class="actions">
+      <button class="btn" onclick="load()">Reload</button>
+      <button class="btn" onclick="exportXlsx()">Export XLSX</button>
+      <button class="btn" onclick="importXlsx()">Import XLSX</button>
+      <span id="status" class="muted"></span>
+    </div>
   </div>
 
   <h3>Liste</h3>
@@ -897,8 +917,23 @@ load();
     color:var(--text);
   }
   .wrap{max-width:1200px; margin:0 auto; padding:16px}
-  .row{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
-  label{font-size:12px; color:var(--muted);}
+  .row{display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:10px;}
+  .field{display:flex; flex-direction:column; gap:4px; min-width:140px; flex:0 1 180px}
+  .field.wide{flex:1 1 360px}
+  .field.medium{flex:0 1 220px}
+  .field.small{flex:0 1 150px}
+  .field.tiny{flex:0 1 100px}
+  .field label{font-size:12px; color:var(--muted); font-weight:600;}
+  .actions{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .checkfield{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    min-height:38px;
+    padding:0 4px;
+    color:var(--text);
+    font-size:13px;
+  }
   input,select,textarea{
     width:100%;
     padding:10px 12px;
@@ -908,9 +943,27 @@ load();
     font-size:14px;
     outline:none;
   }
+  .checkfield input{
+    width:18px;
+    height:18px;
+    margin:0;
+    border-radius:4px;
+  }
   textarea{min-height:110px; font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
   input:focus,select:focus,textarea:focus{border-color:var(--blue); box-shadow:0 0 0 3px rgba(0,94,184,.15);}
-  button{padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:#fff; cursor:pointer}
+  button{
+    min-height:38px;
+    padding:8px 12px;
+    border-radius:10px;
+    border:1px solid #b9cde3;
+    background:#e8f0f8;
+    color:#17324b;
+    font-weight:600;
+    cursor:pointer;
+  }
+  button:hover{background:#dce8f5;}
+  button:active{background:#cfe0f1;}
+  button:focus-visible{outline:none; box-shadow:0 0 0 3px rgba(0,94,184,.2);}
   .pill{
     display:inline-flex;
     align-items:center;
@@ -919,7 +972,7 @@ load();
     border:1px solid var(--border);
     border-radius:999px;
     font-size:13px;
-    background:#fff;
+    background:#eef3f8;
   }
   .muted{color:var(--muted);}
   fieldset{
@@ -932,9 +985,9 @@ load();
   }
   legend{padding:0 6px; font-weight:600;}
   pre{background:#f8fafc; border:1px solid var(--border); border-radius:8px; padding:10px; overflow:auto;}
-  @media(max-width:900px){fieldset .row input{width:100%!important;}}
+  @media(max-width:900px){.field{flex:1 1 100%;}}
   .topnav{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}
-  .navbtn{padding:8px 12px; border:1px solid #d6dde7; border-radius:8px; background:#fff; color:#1f2933; text-decoration:none}
+  .navbtn{padding:8px 12px; border:1px solid #c2d2e4; border-radius:8px; background:#e8f0f8; color:#1f2933; text-decoration:none}
   .navbtn.active{background:#005eb8; color:#fff; border-color:#005eb8}
 
 </style>
@@ -949,35 +1002,41 @@ load();
   </p>
 
   <div class="row">
-    <label>UI Token:</label>
-    <input id="token" style="width:420px" placeholder="MAS004-..."/>
-    <button onclick="saveToken()">Save</button>
-    <span id="tokstate" class="pill"></span>
-    <a href="/" style="margin-left:auto">Home</a>
+    <div class="field wide">
+      <label>UI Token</label>
+      <input id="token" placeholder="MAS004-..."/>
+    </div>
+    <div class="actions">
+      <button onclick="saveToken()">Save</button>
+      <span id="tokstate" class="pill"></span>
+      <a href="/" style="margin-left:4px">Home</a>
+    </div>
   </div>
 
   <fieldset>
     <legend>Raspi Network (eth0/eth1)</legend>
 
     <div class="row">
-      <label style="width:70px">eth0 IP</label><input id="eth0_ip" style="width:160px"/>
-      <label>Subnet</label><input id="eth0_mask" style="width:160px" placeholder="255.255.255.0" oninput="maskChanged('eth0')"/>
-      <label>Prefix</label><input id="eth0_pre" style="width:60px" placeholder="24" oninput="prefixChanged('eth0')"/>
-      <label>GW</label><input id="eth0_gw" style="width:160px"/>
+      <div class="field medium"><label>eth0 IP</label><input id="eth0_ip"/></div>
+      <div class="field medium"><label>Subnet</label><input id="eth0_mask" placeholder="255.255.255.0" oninput="maskChanged('eth0')"/></div>
+      <div class="field tiny"><label>Prefix</label><input id="eth0_pre" placeholder="24" oninput="prefixChanged('eth0')"/></div>
+      <div class="field medium"><label>GW</label><input id="eth0_gw"/></div>
     </div>
 
     <div class="row">
-      <label style="width:70px">eth1 IP</label><input id="eth1_ip" style="width:160px"/>
-      <label>Subnet</label><input id="eth1_mask" style="width:160px" placeholder="255.255.255.0" oninput="maskChanged('eth1')"/>
-      <label>Prefix</label><input id="eth1_pre" style="width:60px" placeholder="24" oninput="prefixChanged('eth1')"/>
-      <label>GW</label><input id="eth1_gw" style="width:160px"/>
+      <div class="field medium"><label>eth1 IP</label><input id="eth1_ip"/></div>
+      <div class="field medium"><label>Subnet</label><input id="eth1_mask" placeholder="255.255.255.0" oninput="maskChanged('eth1')"/></div>
+      <div class="field tiny"><label>Prefix</label><input id="eth1_pre" placeholder="24" oninput="prefixChanged('eth1')"/></div>
+      <div class="field medium"><label>GW</label><input id="eth1_gw"/></div>
     </div>
 
     <div class="row">
-      <label><input type="checkbox" id="apply_now"/> Apply now (live setzen)</label>
-      <button onclick="saveNetwork()">Save Network</button>
-      <button onclick="reloadAll()">Reload</button>
-      <span id="net_status" class="muted"></span>
+      <label class="checkfield"><input type="checkbox" id="apply_now"/>Apply now (live setzen)</label>
+      <div class="actions">
+        <button onclick="saveNetwork()">Save Network</button>
+        <button onclick="reloadAll()">Reload</button>
+        <span id="net_status" class="muted"></span>
+      </div>
     </div>
 
     <h4>Status</h4>
@@ -987,17 +1046,17 @@ load();
   <fieldset>
     <legend>Databridge / Mikrotom</legend>
     <div class="row">
-      <label>peer_base_url</label><input id="peer_base_url" style="width:420px"/>
-      <label>peer_watchdog_host</label><input id="peer_watchdog_host" style="width:160px"/>
-      <label>peer_health_path</label><input id="peer_health_path" style="width:120px"/>
+      <div class="field wide"><label>peer_base_url</label><input id="peer_base_url"/></div>
+      <div class="field medium"><label>peer_watchdog_host</label><input id="peer_watchdog_host"/></div>
+      <div class="field small"><label>peer_health_path</label><input id="peer_health_path"/></div>
     </div>
     <div class="row">
-      <label>http_timeout_s</label><input id="http_timeout_s" style="width:80px"/>
-      <label>tls_verify</label><input id="tls_verify" style="width:80px" placeholder="true/false"/>
-      <label>eth0_source_ip</label><input id="eth0_source_ip" style="width:160px"/>
+      <div class="field tiny"><label>http_timeout_s</label><input id="http_timeout_s"/></div>
+      <div class="field tiny"><label>tls_verify</label><input id="tls_verify" placeholder="true/false"/></div>
+      <div class="field medium"><label>eth0_source_ip</label><input id="eth0_source_ip"/></div>
     </div>
     <div class="row">
-      <label>shared_secret</label><input id="shared_secret" style="width:420px" placeholder="(leer = aus)"/>
+      <div class="field wide"><label>shared_secret</label><input id="shared_secret" placeholder="(leer = aus)"/></div>
     </div>
     <div class="row">
       <button onclick="saveBridge()">Save Bridge + Restart</button>
@@ -1008,20 +1067,20 @@ load();
   <fieldset>
     <legend>Device Endpoints (ESP / VJ3350 / VJ6530)</legend>
     <div class="row">
-      <label>ESP host</label><input id="esp_host" style="width:160px"/>
-      <label>ESP port</label><input id="esp_port" style="width:80px"/>
-      <label>ESP watchdog host</label><input id="esp_watchdog_host" style="width:180px" placeholder="leer = esp_host"/>
-      <label><input type="checkbox" id="esp_simulation"/> Simulation</label>
+      <div class="field medium"><label>ESP host</label><input id="esp_host"/></div>
+      <div class="field tiny"><label>ESP port</label><input id="esp_port"/></div>
+      <div class="field medium"><label>ESP watchdog host</label><input id="esp_watchdog_host" placeholder="leer = esp_host"/></div>
+      <label class="checkfield"><input type="checkbox" id="esp_simulation"/>Simulation</label>
     </div>
     <div class="row">
-      <label>VJ3350 host</label><input id="vj3350_host" style="width:160px"/>
-      <label>VJ3350 port</label><input id="vj3350_port" style="width:80px"/>
-      <label><input type="checkbox" id="vj3350_simulation"/> Simulation</label>
+      <div class="field medium"><label>VJ3350 host</label><input id="vj3350_host"/></div>
+      <div class="field tiny"><label>VJ3350 port</label><input id="vj3350_port"/></div>
+      <label class="checkfield"><input type="checkbox" id="vj3350_simulation"/>Simulation</label>
     </div>
     <div class="row">
-      <label>VJ6530 host</label><input id="vj6530_host" style="width:160px"/>
-      <label>VJ6530 port</label><input id="vj6530_port" style="width:80px"/>
-      <label><input type="checkbox" id="vj6530_simulation"/> Simulation</label>
+      <div class="field medium"><label>VJ6530 host</label><input id="vj6530_host"/></div>
+      <div class="field tiny"><label>VJ6530 port</label><input id="vj6530_port"/></div>
+      <label class="checkfield"><input type="checkbox" id="vj6530_simulation"/>Simulation</label>
     </div>
     <div class="row">
       <button onclick="saveDevices()">Save Devices + Restart</button>
@@ -1032,10 +1091,10 @@ load();
   <fieldset>
     <legend>Daily Log Files</legend>
     <div class="row">
-      <label>Keep days (All)</label><input id="logs_keep_days_all" type="number" min="1" max="3650" style="width:80px"/>
-      <label>Keep days (ESP32)</label><input id="logs_keep_days_esp" type="number" min="1" max="3650" style="width:80px"/>
-      <label>Keep days (TTO)</label><input id="logs_keep_days_tto" type="number" min="1" max="3650" style="width:80px"/>
-      <label>Keep days (Laser)</label><input id="logs_keep_days_laser" type="number" min="1" max="3650" style="width:80px"/>
+      <div class="field tiny"><label>Keep days (All)</label><input id="logs_keep_days_all" type="number" min="1" max="3650"/></div>
+      <div class="field tiny"><label>Keep days (ESP32)</label><input id="logs_keep_days_esp" type="number" min="1" max="3650"/></div>
+      <div class="field tiny"><label>Keep days (TTO)</label><input id="logs_keep_days_tto" type="number" min="1" max="3650"/></div>
+      <div class="field tiny"><label>Keep days (Laser)</label><input id="logs_keep_days_laser" type="number" min="1" max="3650"/></div>
     </div>
     <div class="row">
       <button onclick="saveLogSettings()">Save Log Settings + Restart</button>
@@ -1623,7 +1682,6 @@ async function sendFrom(source){
         appendOutput("raspi", `[${ts()}] incoming from ${source}: ${line}`);
       }
     }
-    cmdEl.value = "";
     setStatus(source, items.length > 1 ? `ok (${items.length})` : "ok");
     await Promise.all([loadLogs(source), loadLogs("raspi")]);
   }catch(e){
@@ -1689,4 +1747,3 @@ document.addEventListener("visibilitychange", () => {
 """.replace("__NAV__", nav)
 
     return app
-
