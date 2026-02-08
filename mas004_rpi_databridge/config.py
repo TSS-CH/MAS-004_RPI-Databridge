@@ -58,6 +58,12 @@ class Settings:
     vj6530_port: int = 0
     vj6530_simulation: bool = True
 
+    # Daily log-file retention (days)
+    logs_keep_days_all: int = 30
+    logs_keep_days_esp: int = 30
+    logs_keep_days_tto: int = 30
+    logs_keep_days_laser: int = 30
+
     # UI/API auth
     ui_token: str = "change-me"
     shared_secret: str = ""

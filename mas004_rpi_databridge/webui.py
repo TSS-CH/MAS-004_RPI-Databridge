@@ -1,4 +1,4 @@
-﻿from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any
 
 from fastapi import FastAPI, Request, HTTPException, Header, UploadFile, File, Query
 from fastapi.responses import HTMLResponse, Response
@@ -53,6 +53,12 @@ class ConfigUpdate(BaseModel):
     vj6530_host: Optional[str] = None
     vj6530_port: Optional[int] = None
     vj6530_simulation: Optional[bool] = None
+
+    # daily logfile retention
+    logs_keep_days_all: Optional[int] = None
+    logs_keep_days_esp: Optional[int] = None
+    logs_keep_days_tto: Optional[int] = None
+    logs_keep_days_laser: Optional[int] = None
 
 
 class NetworkUpdate(BaseModel):
@@ -135,6 +141,19 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
             raise HTTPException(status_code=400, detail="Empty message")
         return parts
 
+    def logo_html() -> str:
+        return """
+<div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:10px;">
+  <div style="display:flex; align-items:center; gap:10px;">
+    <svg width="360" height="72" viewBox="0 0 720 144" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="VIDEOJET">
+      <path d="M12 72 C60 24, 145 16, 228 45 L148 45 C102 36, 56 45, 20 74 Z" fill="#0EA5E9"/>
+      <path d="M18 86 C70 122, 152 130, 232 104 L154 104 C101 113, 57 107, 18 86 Z" fill="#0EA5E9"/>
+      <text x="246" y="102" font-family="Segoe UI, Arial, sans-serif" font-style="italic" font-weight="900" font-size="98" fill="#111111">VIDEOJET</text>
+    </svg>
+  </div>
+</div>
+"""
+
     def nav_html(active: str) -> str:
         items = [
             ("home", "/", "Home"),
@@ -147,7 +166,7 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
         for key, href, label in items:
             cls = "navbtn active" if key == active else "navbtn"
             links.append(f'<a class="{cls}" href="{href}">{label}</a>')
-        return '<nav class="topnav">' + "".join(links) + "</nav>"
+        return logo_html() + '<nav class="topnav">' + "".join(links) + "</nav>"
 
     # -----------------------------
     # Home
@@ -588,6 +607,44 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
             headers={"Content-Disposition": f'attachment; filename="{channel}.log"'},
         )
 
+    @app.get("/api/logfiles/list")
+    def list_logfiles(x_token: Optional[str] = Header(default=None)):
+        cfg2 = Settings.load(cfg_path)
+        require_token(x_token, cfg2)
+        logs.apply_retention(cfg2)
+        items = logs.list_daily_files()
+        out = []
+        for it in items:
+            out.append(
+                {
+                    "name": it.get("name"),
+                    "group": it.get("group"),
+                    "group_label": it.get("group_label"),
+                    "date": it.get("date"),
+                    "size_bytes": it.get("size_bytes"),
+                    "mtime_ts": it.get("mtime_ts"),
+                }
+            )
+        return {"ok": True, "items": out}
+
+    @app.get("/api/logfiles/download")
+    def download_daily_logfile(
+        x_token: Optional[str] = Header(default=None),
+        name: str = Query(...),
+    ):
+        cfg2 = Settings.load(cfg_path)
+        require_token(x_token, cfg2)
+        try:
+            data = logs.read_daily_file(name)
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        safe_name = os.path.basename(name)
+        return Response(
+            content=data.encode("utf-8"),
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}"'},
+        )
+
     # =========================
     # ===== SIMPLE UI =========
     # =========================
@@ -968,6 +1025,35 @@ load();
       <span id="dev_status" class="muted"></span>
     </div>
   </fieldset>
+
+  <fieldset>
+    <legend>Daily Log Files</legend>
+    <div class="row">
+      <label>Keep days (All)</label><input id="logs_keep_days_all" type="number" min="1" max="3650" style="width:80px"/>
+      <label>Keep days (ESP32)</label><input id="logs_keep_days_esp" type="number" min="1" max="3650" style="width:80px"/>
+      <label>Keep days (TTO)</label><input id="logs_keep_days_tto" type="number" min="1" max="3650" style="width:80px"/>
+      <label>Keep days (Laser)</label><input id="logs_keep_days_laser" type="number" min="1" max="3650" style="width:80px"/>
+    </div>
+    <div class="row">
+      <button onclick="saveLogSettings()">Save Log Settings + Restart</button>
+      <button onclick="loadDailyLogFiles()">Reload Log File List</button>
+      <span id="logcfg_status" class="muted"></span>
+    </div>
+    <div style="overflow:auto; margin-top:8px;">
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; border-bottom:1px solid #d6dde7; padding:6px;">Datei</th>
+            <th style="text-align:left; border-bottom:1px solid #d6dde7; padding:6px;">Typ</th>
+            <th style="text-align:left; border-bottom:1px solid #d6dde7; padding:6px;">Datum</th>
+            <th style="text-align:left; border-bottom:1px solid #d6dde7; padding:6px;">Groesse</th>
+            <th style="text-align:left; border-bottom:1px solid #d6dde7; padding:6px;">Aktion</th>
+          </tr>
+        </thead>
+        <tbody id="daily_log_files"></tbody>
+      </table>
+    </div>
+  </fieldset>
   </div>
 
 <script>
@@ -1099,6 +1185,10 @@ async function reloadAll(){
   document.getElementById("vj6530_host").value = c.vj6530_host || "";
   document.getElementById("vj6530_port").value = c.vj6530_port ?? "";
   document.getElementById("vj6530_simulation").checked = !!c.vj6530_simulation;
+  document.getElementById("logs_keep_days_all").value = c.logs_keep_days_all ?? 30;
+  document.getElementById("logs_keep_days_esp").value = c.logs_keep_days_esp ?? 30;
+  document.getElementById("logs_keep_days_tto").value = c.logs_keep_days_tto ?? 30;
+  document.getElementById("logs_keep_days_laser").value = c.logs_keep_days_laser ?? 30;
 
   // network
   const net = await api("/api/system/network");
@@ -1115,6 +1205,7 @@ async function reloadAll(){
   document.getElementById("eth1_gw").value = n.eth1_gateway || "";
 
   document.getElementById("netinfo").textContent = JSON.stringify(net.status, null, 2);
+  await loadDailyLogFiles();
 }
 
 async function saveNetwork(){
@@ -1182,6 +1273,81 @@ async function saveDevices(){
   };
   await api("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)});
   document.getElementById("dev_status").textContent = "saved (service restarted)";
+}
+
+function toNum(id, fallback){
+  const v = Number(document.getElementById(id).value.trim());
+  if(!Number.isFinite(v)) return fallback;
+  return Math.max(1, Math.min(3650, Math.round(v)));
+}
+
+function fmtBytes(n){
+  const v = Number(n || 0);
+  if(v < 1024) return `${v} B`;
+  if(v < 1024*1024) return `${(v/1024).toFixed(1)} KB`;
+  return `${(v/(1024*1024)).toFixed(2)} MB`;
+}
+
+async function saveLogSettings(){
+  document.getElementById("logcfg_status").textContent = "saving...";
+  const payload = {
+    logs_keep_days_all: toNum("logs_keep_days_all", 30),
+    logs_keep_days_esp: toNum("logs_keep_days_esp", 30),
+    logs_keep_days_tto: toNum("logs_keep_days_tto", 30),
+    logs_keep_days_laser: toNum("logs_keep_days_laser", 30)
+  };
+  await api("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)});
+  document.getElementById("logcfg_status").textContent = "saved (service restarted)";
+  await loadDailyLogFiles();
+}
+
+async function loadDailyLogFiles(){
+  const tbody = document.getElementById("daily_log_files");
+  tbody.innerHTML = '<tr><td colspan="5" style="padding:6px;">loading...</td></tr>';
+  try{
+    const j = await api("/api/logfiles/list");
+    const items = j.items || [];
+    if(!items.length){
+      tbody.innerHTML = '<tr><td colspan="5" style="padding:6px;">keine Dateien</td></tr>';
+      return;
+    }
+    const rows = items.map(it => {
+      const name = it.name || "";
+      const grp = it.group_label || it.group || "";
+      const dt = it.date || "";
+      const sz = fmtBytes(it.size_bytes || 0);
+      const btn = `<button onclick="downloadDailyLog('${name.replace(/'/g, "\\'")}')">Download</button>`;
+      return `<tr>
+        <td style="padding:6px; border-top:1px solid #e7edf6;">${name}</td>
+        <td style="padding:6px; border-top:1px solid #e7edf6;">${grp}</td>
+        <td style="padding:6px; border-top:1px solid #e7edf6;">${dt}</td>
+        <td style="padding:6px; border-top:1px solid #e7edf6;">${sz}</td>
+        <td style="padding:6px; border-top:1px solid #e7edf6;">${btn}</td>
+      </tr>`;
+    });
+    tbody.innerHTML = rows.join("");
+  }catch(e){
+    tbody.innerHTML = `<tr><td colspan="5" style="padding:6px; color:#c62828;">ERROR: ${e.message}</td></tr>`;
+  }
+}
+
+async function downloadDailyLog(name){
+  try{
+    const t = getToken();
+    const r = await fetch("/api/logfiles/download?name=" + encodeURIComponent(name), {headers: t ? {"X-Token": t} : {}});
+    if(!r.ok){
+      const txt = await r.text();
+      throw new Error(txt || ("HTTP " + r.status));
+    }
+    const blob = await r.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }catch(e){
+    alert("Download failed: " + e.message);
+  }
 }
 
 showTok();

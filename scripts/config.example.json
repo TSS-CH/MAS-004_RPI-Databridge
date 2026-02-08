@@ -41,5 +41,10 @@
 
   "vj6530_host": "192.168.2.30",
   "vj6530_port": 3007,
-  "vj6530_simulation": true
+  "vj6530_simulation": true,
+
+  "logs_keep_days_all": 30,
+  "logs_keep_days_esp": 30,
+  "logs_keep_days_tto": 30,
+  "logs_keep_days_laser": 30
 }

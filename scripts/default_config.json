@@ -19,5 +19,9 @@
   "esp_watchdog_host": "",
   "vj3350_simulation": true,
   "vj6530_simulation": true,
+  "logs_keep_days_all": 30,
+  "logs_keep_days_esp": 30,
+  "logs_keep_days_tto": 30,
+  "logs_keep_days_laser": 30,
   "ui_token": "change-me"
 }
