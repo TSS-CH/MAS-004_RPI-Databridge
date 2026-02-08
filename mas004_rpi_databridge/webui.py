@@ -148,7 +148,7 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
 
     def logo_html() -> str:
         return """
-<div style="display:flex; align-items:center; justify-content:flex-start; margin-bottom:10px;">
+<div style="display:flex; align-items:center; justify-content:flex-start; margin-bottom:8px;">
   <img src="/ui/assets/videojet-logo.jpg" alt="Videojet" style="display:block; height:72px; width:auto; max-width:100%; object-fit:contain;"/>
 </div>
 """
@@ -165,7 +165,14 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
         for key, href, label in items:
             cls = "navbtn active" if key == active else "navbtn"
             links.append(f'<a class="{cls}" href="{href}">{label}</a>')
-        return logo_html() + '<nav class="topnav">' + "".join(links) + "</nav>"
+        return (
+            '<div style="position:sticky; top:0; z-index:60; background:#f4f6f9; '
+            'padding:8px 0 10px 0; margin-bottom:8px;">'
+            + logo_html()
+            + '<nav class="topnav">'
+            + "".join(links)
+            + "</nav></div>"
+        )
 
     @app.get("/ui/assets/videojet-logo.jpg", include_in_schema=False)
     def ui_logo_asset():
@@ -255,7 +262,7 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
   <title>MAS-004 Home</title>
   <style>
     body{{margin:0; font-family:Segoe UI,Arial,sans-serif; background:#f4f6f9; color:#1f2933}}
-    .wrap{{max-width:1200px; margin:0 auto; padding:16px}}
+    .wrap{{max-width:1500px; margin:0 auto; padding:16px}}
     .topnav{{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}}
     .navbtn{{padding:8px 12px; border:1px solid #d6dde7; border-radius:8px; background:#fff; color:#1f2933; text-decoration:none}}
     .navbtn.active{{background:#005eb8; color:#fff; border-color:#005eb8}}
@@ -706,7 +713,7 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
   <title>Params UI</title>
   <style>
     body{font-family:Segoe UI,Arial,sans-serif; margin:0; background:#f4f6f9; color:#1f2933}
-    .wrap{max-width:1200px; margin:0 auto; padding:16px}
+    .wrap{max-width:1500px; margin:0 auto; padding:16px}
     .topnav{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}
     .navbtn{padding:8px 12px; border:1px solid #c2d2e4; border-radius:8px; background:#e8f0f8; color:#1f2933; text-decoration:none}
     .navbtn.active{background:#005eb8; color:#fff; border-color:#005eb8}
@@ -734,20 +741,6 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
   __NAV__
   <div class="card">
   <h2>Parameter UI</h2>
-  <p class="muted">Token wird im Browser gespeichert (localStorage). Export/Import/Edit braucht X-Token.</p>
-
-  <div class="row">
-    <div class="field grow">
-      <label>UI Token</label>
-      <input id="token" placeholder="MAS004-..."/>
-    </div>
-    <div class="actions">
-      <button class="btn" onclick="saveToken()">Save</button>
-      <span id="tokstate" class="pill"></span>
-    </div>
-  </div>
-
-  <hr/>
 
   <div class="row">
     <div class="field grow">
@@ -789,33 +782,14 @@ const LS_KEY = "mas004_ui_token";
 function lsGet(k){
   try { return localStorage.getItem(k) || ""; } catch(e){ return ""; }
 }
-function lsSet(k,v){
-  try { localStorage.setItem(k, v); } catch(e){}
-}
 
 function cookieGet(name){
   const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()\\[\\]\\\\\\/\\+^])/g, '\\\\$1') + '=([^;]*)'));
   return m ? decodeURIComponent(m[1]) : "";
 }
-function cookieSet(name, val){
-  document.cookie = `${name}=${encodeURIComponent(val)}; Path=/; Max-Age=${60*60*24*365}; SameSite=Lax`;
-}
 
 function getToken(){
   return lsGet(LS_KEY) || cookieGet(LS_KEY) || "";
-}
-
-function saveToken(){
-  const v = document.getElementById("token").value.trim();
-  lsSet(LS_KEY, v);
-  cookieSet(LS_KEY, v);
-  showTok();
-}
-
-function showTok(){
-  const t = getToken();
-  document.getElementById("token").value = t;
-  document.getElementById("tokstate").textContent = t ? "token ok" : "no token";
 }
 
 async function api(path, opt={}){
@@ -922,7 +896,6 @@ function exportXlsx(){
   })();
 }
 
-showTok();
 load();
 </script>
 </body>
@@ -961,7 +934,7 @@ load();
     background:var(--bg);
     color:var(--text);
   }
-  .wrap{max-width:1240px; margin:0 auto; padding:16px}
+  .wrap{max-width:1500px; margin:0 auto; padding:16px}
   .grid{display:grid; gap:12px; align-items:end; justify-content:start; margin-bottom:10px;}
   .token-grid{grid-template-columns:minmax(320px,760px) auto;}
   .cols-4{grid-template-columns:220px 220px 110px 220px;}
