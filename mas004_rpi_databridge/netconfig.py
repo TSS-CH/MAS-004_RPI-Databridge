@@ -135,6 +135,69 @@ def apply_static_nmcli(iface: str, cfg: IfaceCfg) -> Dict[str, Any]:
 DHCPCD_PATH = "/etc/dhcpcd.conf"
 
 
+def _strip_legacy_iface_blocks(txt: str, iface: str) -> str:
+    """
+    Entfernt alte, nicht-MAS004 Interface-Bloecke fuer eth0/eth1, die
+    Gateway/DNS/Metric ueberschreiben koennen.
+    MAS004-Bloecke bleiben erhalten.
+    """
+    lines = txt.splitlines()
+    out = []
+    i = 0
+    iface_pat = re.compile(rf"^\s*interface\s+{re.escape(iface)}\s*$")
+    any_iface_pat = re.compile(r"^\s*interface\s+\S+")
+    mas_begin_pat = re.compile(r"^\s*#\s*MAS004-BEGIN\s+\S+")
+
+    while i < len(lines):
+        line = lines[i]
+        if not iface_pat.match(line):
+            out.append(line)
+            i += 1
+            continue
+
+        # Wenn direkt nach MAS004-BEGIN -> behalten
+        prev_nonempty = ""
+        j = len(out) - 1
+        while j >= 0:
+            if out[j].strip():
+                prev_nonempty = out[j].strip()
+                break
+            j -= 1
+        if prev_nonempty == f"# MAS004-BEGIN {iface}":
+            out.append(line)
+            i += 1
+            continue
+
+        # Kandidat-Stanza sammeln bis naechstes interface oder naechster MAS004-Block
+        stanza = [line]
+        i += 1
+        while i < len(lines):
+            nxt = lines[i]
+            if any_iface_pat.match(nxt) or mas_begin_pat.match(nxt):
+                break
+            stanza.append(nxt)
+            i += 1
+
+        body = "\n".join(stanza[1:])
+        legacy_tokens = (
+            "static ip_address=",
+            "static routers=",
+            "nogateway",
+            "static domain_name_servers=",
+            "metric ",
+        )
+        if any(tok in body for tok in legacy_tokens):
+            # Legacy-Block ueberspringen + direkt folgende Leerzeilen aufraeumen
+            while i < len(lines) and not lines[i].strip():
+                i += 1
+            continue
+
+        # Falls es kein Legacy-Block ist, unveraendert behalten
+        out.extend(stanza)
+
+    return "\n".join(out).rstrip() + "\n"
+
+
 def apply_static_dhcpcd(iface: str, cfg: IfaceCfg) -> Dict[str, Any]:
     iface = _iface_name(iface)
     ok, msg = validate_iface_cfg(cfg)
@@ -160,6 +223,7 @@ def apply_static_dhcpcd(iface: str, cfg: IfaceCfg) -> Dict[str, Any]:
         # Remove old block for iface
         pattern = re.compile(rf"(?ms)^\s*#\s*MAS004-BEGIN\s+{re.escape(iface)}\s*$.*?^\s*#\s*MAS004-END\s+{re.escape(iface)}\s*$\s*")
         txt = re.sub(pattern, "", txt)
+        txt = _strip_legacy_iface_blocks(txt, iface)
 
         router_line = f"static routers={gw}\n" if gw else "nogateway\n"
         dns_line = f"static domain_name_servers={' '.join(dns)}\n" if dns else ""
