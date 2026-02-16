@@ -64,8 +64,17 @@ def get_current_ip_info() -> Dict[str, Any]:
     out: Dict[str, Any] = {"ok": True, "ifaces": {}}
     for iface in ("eth0", "eth1"):
         try:
-            ip = _run(["bash", "-lc", f"ip -4 addr show {iface} | grep -oP '(?<=inet\\s)\\d+\\.\\d+\\.\\d+\\.\\d+/\\d+' | head -n1"], check=False).stdout.strip()
-            gw = _run(["bash", "-lc", f"ip route | grep '^default' | grep {iface} | awk '{{print $3}}' | head -n1"], check=False).stdout.strip()
+            ip_out = _run(["ip", "-o", "-4", "addr", "show", "dev", iface], check=False).stdout
+            ip_m = re.search(r"\binet\s+(\d+\.\d+\.\d+\.\d+/\d+)\b", ip_out)
+            ip = ip_m.group(1) if ip_m else ""
+
+            gw_out = _run(["ip", "route", "show", "default", "dev", iface], check=False).stdout
+            gw = ""
+            for line in gw_out.splitlines():
+                m = re.search(r"\bdefault\s+via\s+(\d+\.\d+\.\d+\.\d+)\b", line)
+                if m:
+                    gw = m.group(1)
+                    break
             out["ifaces"][iface] = {"cidr": ip or "", "gw": gw or ""}
         except Exception as e:
             out["ifaces"][iface] = {"cidr": "", "gw": "", "err": repr(e)}
@@ -81,10 +90,19 @@ def _nmcli_find_connection_for_iface(iface: str) -> Optional[str]:
     Finds a NM connection name bound to device.
     """
     try:
-        r = _run(["bash", "-lc", f"nmcli -t -f NAME,DEVICE con show | grep ':{iface}$' | head -n1"], check=False).stdout.strip()
-        if not r:
-            return None
-        return r.split(":")[0].strip() or None
+        r = _run(["nmcli", "-t", "-f", "NAME,DEVICE", "con", "show"], check=False).stdout
+        for line in r.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(":")
+            if len(parts) < 2:
+                continue
+            name = parts[0].strip()
+            dev = parts[-1].strip()
+            if dev == iface and name:
+                return name
+        return None
     except Exception:
         return None
 
