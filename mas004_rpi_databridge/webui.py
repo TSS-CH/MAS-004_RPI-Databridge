@@ -1091,7 +1091,14 @@ load();
       <div class="field"><label>eth0_source_ip</label><input id="eth0_source_ip"/></div>
     </div>
     <div class="grid">
-      <div class="field"><label>shared_secret</label><input id="shared_secret" placeholder="(leer = aus)"/></div>
+      <div class="field">
+        <label>shared_secret</label>
+        <input id="shared_secret" placeholder="(leer = aus)"/>
+        <div id="shared_secret_state" class="muted">(leer = aus)</div>
+      </div>
+    </div>
+    <div class="actions">
+      <label class="checkline"><input type="checkbox" id="clear_shared_secret"/>shared_secret loeschen (auf leer setzen)</label>
     </div>
     <div class="actions">
       <button onclick="saveBridge()">Save Bridge + Restart</button>
@@ -1272,7 +1279,19 @@ async function reloadAll(){
   document.getElementById("http_timeout_s").value = c.http_timeout_s ?? "";
   document.getElementById("tls_verify").value = String(c.tls_verify ?? false);
   document.getElementById("eth0_source_ip").value = c.eth0_source_ip || "";
-  document.getElementById("shared_secret").value = (c.shared_secret && c.shared_secret!=="***") ? c.shared_secret : "";
+  const secEl = document.getElementById("shared_secret");
+  const secStateEl = document.getElementById("shared_secret_state");
+  const hasMaskedSecret = c.shared_secret === "***";
+  if(hasMaskedSecret){
+    secEl.value = "********";
+    secEl.placeholder = "gesetzt (versteckt)";
+    secStateEl.textContent = "gesetzt (versteckt)";
+  }else{
+    secEl.value = (c.shared_secret || "").trim();
+    secEl.placeholder = "(leer = aus)";
+    secStateEl.textContent = secEl.value ? "gesetzt" : "(leer = aus)";
+  }
+  document.getElementById("clear_shared_secret").checked = false;
 
   document.getElementById("esp_host").value = c.esp_host || "";
   document.getElementById("esp_port").value = c.esp_port ?? "";
@@ -1343,6 +1362,16 @@ async function saveNetwork(){
 
 async function saveBridge(){
   document.getElementById("bridge_status").textContent = "saving...";
+  const secEl = document.getElementById("shared_secret");
+  const secretRaw = secEl.value.trim();
+  const clearSecret = document.getElementById("clear_shared_secret").checked;
+  let sharedSecretValue = null; // null => unveraendert lassen
+  if(clearSecret){
+    sharedSecretValue = "";
+  }else if(secretRaw && secretRaw !== "********"){
+    sharedSecretValue = secretRaw;
+  }
+
   const payload = {
     peer_base_url: document.getElementById("peer_base_url").value.trim(),
     peer_watchdog_host: document.getElementById("peer_watchdog_host").value.trim(),
@@ -1350,7 +1379,7 @@ async function saveBridge(){
     http_timeout_s: Number(document.getElementById("http_timeout_s").value.trim()),
     tls_verify: (document.getElementById("tls_verify").value.trim().toLowerCase()==="true"),
     eth0_source_ip: document.getElementById("eth0_source_ip").value.trim(),
-    shared_secret: document.getElementById("shared_secret").value.trim()
+    shared_secret: sharedSecretValue
   };
   await api("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)});
   document.getElementById("bridge_status").textContent = "saved (service restarted)";
