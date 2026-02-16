@@ -286,8 +286,8 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
       <div class="grid">
         <div><b>eth0</b>: {cfg2.eth0_ip}</div>
         <div><b>eth1</b>: {cfg2.eth1_ip}</div>
-        <div><b>Outbox</b>: {outbox.count()}</div>
-        <div><b>Inbox pending</b>: {inbox.count_pending()}</div>
+        <div><b>Outbox</b>: <span id="home_outbox">{outbox.count()}</span></div>
+        <div><b>Inbox pending</b>: <span id="home_inbox">{inbox.count_pending()}</span></div>
         <div><b>Peer</b>: {cfg2.peer_base_url}</div>
         <div><b>Watchdog host</b>: {cfg2.peer_watchdog_host}</div>
       </div>
@@ -299,6 +299,37 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
       </div>
     </div>
   </div>
+  <script>
+    const HOME_REFRESH_MS = 2000;
+    let homeLiveTimer = null;
+
+    async function refreshHomeCounters() {{
+      try {{
+        const r = await fetch("/api/ui/status/public");
+        if (!r.ok) return;
+        const j = await r.json();
+        const outboxNode = document.getElementById("home_outbox");
+        const inboxNode = document.getElementById("home_inbox");
+        if (outboxNode) outboxNode.textContent = String(j.outbox_count ?? "-");
+        if (inboxNode) inboxNode.textContent = String(j.inbox_pending ?? "-");
+      }} catch (_e) {{
+      }}
+    }}
+
+    function startHomeLiveCounters() {{
+      if (homeLiveTimer) return;
+      homeLiveTimer = setInterval(() => {{
+        if (document.hidden) return;
+        refreshHomeCounters();
+      }}, HOME_REFRESH_MS);
+    }}
+
+    refreshHomeCounters();
+    startHomeLiveCounters();
+    document.addEventListener("visibilitychange", () => {{
+      if (!document.hidden) refreshHomeCounters();
+    }});
+  </script>
 </body>
 </html>
         """
@@ -310,6 +341,17 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
     @app.get("/health")
     def health():
         return {"ok": True}
+
+    # -----------------------------
+    # UI status (public mini status for Home page)
+    # -----------------------------
+    @app.get("/api/ui/status/public")
+    def ui_status_public():
+        return {
+            "ok": True,
+            "outbox_count": outbox.count(),
+            "inbox_pending": inbox.count_pending(),
+        }
 
     # -----------------------------
     # UI status
