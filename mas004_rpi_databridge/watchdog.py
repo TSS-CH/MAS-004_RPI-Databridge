@@ -50,11 +50,20 @@ class Watchdog:
             # do NOT spam; return last state
             return self.is_up
 
-        self._next_check_ts = now + self.interval_s
+        # Wenn der Peer als "down" gilt, schneller erneut pruefen, um schneller zu recovern.
+        # Das verhindert mehrsekundige "Loecher" bei kurzzeitigen Netzwerkstoehrungen.
+        next_interval = self.interval_s if self.is_up else min(self.interval_s, 0.5)
+        self._next_check_ts = now + next_interval
 
-        ok = self._ping_ok()
-        if ok and self.health_url:
+        # Performance/robustness:
+        # Wenn ein Health-Endpoint konfiguriert ist, nutze ihn als primaere Quelle.
+        # Ping ist dann nur noch Fallback (ICMP ist in manchen Netzen geblockt/instabil).
+        if self.health_url:
             ok = self._health_ok()
+            if not ok and self.host:
+                ok = self._ping_ok()
+        else:
+            ok = self._ping_ok()
 
         self._fail = 0 if ok else (self._fail + 1)
         self.is_up = (self._fail < self.down_after)

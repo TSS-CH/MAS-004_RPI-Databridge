@@ -43,15 +43,21 @@ def sender_loop(cfg_path: str):
         while True:
             up = watchdog.tick()
             if not up:
-                time.sleep(cfg.watchdog_interval_s)
+                # Schnell erneut pruefen; Watchdog selbst drosselt intern ueber interval_s.
+                time.sleep(0.2)
                 continue
 
             job = outbox.next_due()
             if not job:
-                time.sleep(0.2)
+                time.sleep(0.05)
                 continue
 
             try:
+                if not (job.url or "").lower().startswith(("http://", "https://")):
+                    print(f"[OUTBOX] drop id={job.id} invalid_url={job.url!r}", flush=True)
+                    outbox.delete(job.id)
+                    continue
+
                 headers = json.loads(job.headers_json)
                 body = json.loads(job.body_json) if job.body_json else None
 
@@ -82,7 +88,7 @@ def router_loop(cfg_path: str):
             while True:
                 did_work = router.tick_once()
                 if not did_work:
-                    time.sleep(0.1)
+                    time.sleep(0.02)
         except Exception as e:
             print(f"[ROUTER] loop error: {repr(e)}", flush=True)
             time.sleep(1.0)

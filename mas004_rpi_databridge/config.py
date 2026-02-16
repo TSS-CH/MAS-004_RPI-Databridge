@@ -33,7 +33,7 @@ class Settings:
     peer_health_path: str = "/health"
 
     # Watchdog
-    watchdog_interval_s: float = 5.0
+    watchdog_interval_s: float = 2.0
     watchdog_timeout_s: float = 1.0
     watchdog_down_after: int = 3
 

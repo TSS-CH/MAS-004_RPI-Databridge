@@ -41,7 +41,7 @@ class Outbox:
                 """SELECT id,created_ts,method,url,headers_json,body_json,idempotency_key,retry_count,next_attempt_ts
                    FROM outbox
                    WHERE next_attempt_ts <= ?
-                   ORDER BY next_attempt_ts ASC, created_ts ASC
+                   ORDER BY next_attempt_ts ASC, retry_count ASC, created_ts ASC
                    LIMIT 1""",
                 (now_ts(),)
             ).fetchone()
