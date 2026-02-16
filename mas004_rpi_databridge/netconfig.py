@@ -161,7 +161,7 @@ def apply_static_dhcpcd(iface: str, cfg: IfaceCfg) -> Dict[str, Any]:
         pattern = re.compile(rf"(?ms)^\s*#\s*MAS004-BEGIN\s+{re.escape(iface)}\s*$.*?^\s*#\s*MAS004-END\s+{re.escape(iface)}\s*$\s*")
         txt = re.sub(pattern, "", txt)
 
-        router_line = f"static routers={gw}\n" if gw else ""
+        router_line = f"static routers={gw}\n" if gw else "nogateway\n"
         dns_line = f"static domain_name_servers={' '.join(dns)}\n" if dns else ""
         block = (
             f"# MAS004-BEGIN {iface}\n"

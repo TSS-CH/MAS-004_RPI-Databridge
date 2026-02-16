@@ -420,9 +420,12 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
 
         applied = []
         if req.apply_now:
+            # dhcpcd kann bei mehrfachen Restart-Zyklen DNS der ersten NIC ueberschreiben.
+            # Deshalb bei leerem eth1 DNS fuer den Live-Apply das eth0 DNS mitgeben.
+            dns1_runtime = dns1 if dns1 else dns0
             # try to apply immediately
             r0 = apply_static("eth0", IfaceCfg(ip=req.eth0_ip, prefix=req.eth0_prefix, gw=cfg2.eth0_gateway, dns=dns0))
-            r1 = apply_static("eth1", IfaceCfg(ip=req.eth1_ip, prefix=req.eth1_prefix, gw=cfg2.eth1_gateway, dns=dns1))
+            r1 = apply_static("eth1", IfaceCfg(ip=req.eth1_ip, prefix=req.eth1_prefix, gw=cfg2.eth1_gateway, dns=dns1_runtime))
             applied = [("eth0", r0), ("eth1", r1)]
 
         return {"ok": True, "applied": applied}
