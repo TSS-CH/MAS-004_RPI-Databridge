@@ -69,10 +69,12 @@ class ConfigUpdate(BaseModel):
 class NetworkUpdate(BaseModel):
     eth0_ip: str
     eth0_prefix: int
-    eth0_gateway: str
+    eth0_gateway: str = ""
+    eth0_dns: str = ""
     eth1_ip: str
     eth1_prefix: int
-    eth1_gateway: str
+    eth1_gateway: str = ""
+    eth1_dns: str = ""
     apply_now: bool = False  # wenn true -> versucht Netzwerk live umzustellen
 
 
@@ -368,7 +370,9 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
         require_token(x_token, cfg2)
         return {"ok": True, "config": {
             "eth0_ip": cfg2.eth0_ip, "eth0_subnet": cfg2.eth0_subnet, "eth0_gateway": cfg2.eth0_gateway,
+            "eth0_dns": getattr(cfg2, "eth0_dns", ""),
             "eth1_ip": cfg2.eth1_ip, "eth1_subnet": cfg2.eth1_subnet, "eth1_gateway": cfg2.eth1_gateway,
+            "eth1_dns": getattr(cfg2, "eth1_dns", ""),
         }, "status": get_current_ip_info()}
 
     @app.post("/api/system/network")
@@ -376,22 +380,49 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
         cfg2 = Settings.load(cfg_path)
         require_token(x_token, cfg2)
 
+        def parse_dns(raw: str) -> list[str]:
+            txt = (raw or "").strip()
+            if not txt:
+                return []
+            out = []
+            for part in re.split(r"[,\s;]+", txt):
+                s = (part or "").strip()
+                if not s:
+                    continue
+                octets = s.split(".")
+                if len(octets) != 4:
+                    raise HTTPException(status_code=400, detail=f"Invalid DNS server '{s}'")
+                try:
+                    vals = [int(x) for x in octets]
+                except Exception:
+                    raise HTTPException(status_code=400, detail=f"Invalid DNS server '{s}'")
+                if any(v < 0 or v > 255 for v in vals):
+                    raise HTTPException(status_code=400, detail=f"Invalid DNS server '{s}'")
+                if s not in out:
+                    out.append(s)
+            return out
+
+        dns0 = parse_dns(req.eth0_dns)
+        dns1 = parse_dns(req.eth1_dns)
+
         # Save into config.json
         cfg2.eth0_ip = req.eth0_ip
         cfg2.eth0_subnet = str(req.eth0_prefix)
-        cfg2.eth0_gateway = req.eth0_gateway
+        cfg2.eth0_gateway = (req.eth0_gateway or "").strip()
+        cfg2.eth0_dns = " ".join(dns0)
 
         cfg2.eth1_ip = req.eth1_ip
         cfg2.eth1_subnet = str(req.eth1_prefix)
-        cfg2.eth1_gateway = req.eth1_gateway
+        cfg2.eth1_gateway = (req.eth1_gateway or "").strip()
+        cfg2.eth1_dns = " ".join(dns1)
 
         cfg2.save(cfg_path)
 
         applied = []
         if req.apply_now:
             # try to apply immediately
-            r0 = apply_static("eth0", IfaceCfg(ip=req.eth0_ip, prefix=req.eth0_prefix, gw=req.eth0_gateway))
-            r1 = apply_static("eth1", IfaceCfg(ip=req.eth1_ip, prefix=req.eth1_prefix, gw=req.eth1_gateway))
+            r0 = apply_static("eth0", IfaceCfg(ip=req.eth0_ip, prefix=req.eth0_prefix, gw=cfg2.eth0_gateway, dns=dns0))
+            r1 = apply_static("eth1", IfaceCfg(ip=req.eth1_ip, prefix=req.eth1_prefix, gw=cfg2.eth1_gateway, dns=dns1))
             applied = [("eth0", r0), ("eth1", r1)]
 
         return {"ok": True, "applied": applied}
@@ -938,6 +969,7 @@ load();
   .grid{display:grid; gap:12px; align-items:end; justify-content:start; margin-bottom:10px;}
   .token-grid{grid-template-columns:minmax(320px,760px) auto;}
   .cols-4{grid-template-columns:220px 220px 110px 220px;}
+  .cols-5{grid-template-columns:220px 220px 110px 220px 320px;}
   .cols-3a{grid-template-columns:640px 220px 200px;}
   .cols-3b{grid-template-columns:160px 160px 260px;}
   .cols-device{grid-template-columns:260px 130px 260px auto;}
@@ -1017,12 +1049,12 @@ load();
     max-width:100%;
   }
   @media(max-width:1360px){
-    .token-grid,.cols-4,.cols-3a,.cols-3b,.cols-device,.cols-log{
+    .token-grid,.cols-4,.cols-5,.cols-3a,.cols-3b,.cols-device,.cols-log{
       grid-template-columns:repeat(2,minmax(220px,1fr));
     }
   }
   @media(max-width:1100px){
-    .token-grid,.cols-4,.cols-3a,.cols-3b,.cols-device,.cols-log{grid-template-columns:1fr;}
+    .token-grid,.cols-4,.cols-5,.cols-3a,.cols-3b,.cols-device,.cols-log{grid-template-columns:1fr;}
   }
   .topnav{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px}
   .navbtn{padding:8px 12px; border:1px solid #c2d2e4; border-radius:8px; background:#e8f0f8; color:#1f2933; text-decoration:none}
@@ -1053,19 +1085,22 @@ load();
   <fieldset>
     <legend>Raspi Network (eth0/eth1)</legend>
 
-    <div class="grid cols-4">
+    <div class="grid cols-5">
       <div class="field"><label>eth0 IP</label><input id="eth0_ip"/></div>
       <div class="field"><label>Subnet</label><input id="eth0_mask" placeholder="255.255.255.0" oninput="maskChanged('eth0')"/></div>
       <div class="field"><label>Prefix</label><input id="eth0_pre" placeholder="24" oninput="prefixChanged('eth0')"/></div>
       <div class="field"><label>GW</label><input id="eth0_gw"/></div>
+      <div class="field"><label>DNS (eth0)</label><input id="eth0_dns" placeholder="z.B. 10.28.193.4, 10.27.30.201"/></div>
     </div>
 
-    <div class="grid cols-4">
+    <div class="grid cols-5">
       <div class="field"><label>eth1 IP</label><input id="eth1_ip"/></div>
       <div class="field"><label>Subnet</label><input id="eth1_mask" placeholder="255.255.255.0" oninput="maskChanged('eth1')"/></div>
       <div class="field"><label>Prefix</label><input id="eth1_pre" placeholder="24" oninput="prefixChanged('eth1')"/></div>
       <div class="field"><label>GW</label><input id="eth1_gw"/></div>
+      <div class="field"><label>DNS (eth1)</label><input id="eth1_dns" placeholder="optional"/></div>
     </div>
+    <div class="muted">Hinweis: Fuer Produktions-/Firmennetz normalerweise nur `eth0` mit Gateway und DNS setzen. `eth1` Gateway leer lassen, falls nur Maschinen-LAN.</div>
 
     <div class="actions">
       <label class="checkline"><input type="checkbox" id="apply_now"/>Apply now (live setzen)</label>
@@ -1316,11 +1351,13 @@ async function reloadAll(){
   document.getElementById("eth0_pre").value = n.eth0_subnet || "";     // bei dir ist das "Subnet" intern Prefix-String
   prefixChanged("eth0");                                               // fuellt Mask automatisch
   document.getElementById("eth0_gw").value = n.eth0_gateway || "";
+  document.getElementById("eth0_dns").value = n.eth0_dns || "";
 
   document.getElementById("eth1_ip").value = n.eth1_ip || "";
   document.getElementById("eth1_pre").value = n.eth1_subnet || "";
   prefixChanged("eth1");
   document.getElementById("eth1_gw").value = n.eth1_gateway || "";
+  document.getElementById("eth1_dns").value = n.eth1_dns || "";
 
   document.getElementById("netinfo").textContent = JSON.stringify(net.status, null, 2);
   await loadDailyLogFiles();
@@ -1341,9 +1378,11 @@ async function saveNetwork(){
     eth0_ip: document.getElementById("eth0_ip").value.trim(),
     eth0_prefix: p0,
     eth0_gateway: document.getElementById("eth0_gw").value.trim(),
+    eth0_dns: document.getElementById("eth0_dns").value.trim(),
     eth1_ip: document.getElementById("eth1_ip").value.trim(),
     eth1_prefix: p1,
     eth1_gateway: document.getElementById("eth1_gw").value.trim(),
+    eth1_dns: document.getElementById("eth1_dns").value.trim(),
     apply_now: document.getElementById("apply_now").checked
   };
 

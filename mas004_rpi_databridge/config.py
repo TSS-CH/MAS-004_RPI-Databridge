@@ -21,8 +21,10 @@ class Settings:
     eth1_ip: str = ""
     eth0_subnet: str = "24"
     eth0_gateway: str = ""
+    eth0_dns: str = ""
     eth1_subnet: str = "24"
     eth1_gateway: str = ""
+    eth1_dns: str = ""
     eth0_source_ip: str = ""  # outgoing source bind for HttpClient (optional)
 
     # Peer (Microtom)

@@ -6,10 +6,12 @@
   "eth0_ip": "192.168.1.100",
   "eth0_subnet": "24",
   "eth0_gateway": "192.168.1.1",
+  "eth0_dns": "10.28.193.4 10.27.30.201",
 
   "eth1_ip": "192.168.2.100",
   "eth1_subnet": "24",
-  "eth1_gateway": "192.168.2.1",
+  "eth1_gateway": "",
+  "eth1_dns": "",
 
   "eth0_source_ip": "",
 

@@ -3,14 +3,15 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple, List
 
 
 @dataclass
 class IfaceCfg:
     ip: str
     prefix: int
-    gw: str
+    gw: str = ""
+    dns: Optional[List[str]] = None
 
 
 def _run(cmd: list, check=True) -> subprocess.CompletedProcess:
@@ -46,10 +47,13 @@ def _validate_prefix(prefix: int) -> bool:
 def validate_iface_cfg(cfg: IfaceCfg) -> Tuple[bool, str]:
     if not _validate_ipv4(cfg.ip):
         return False, "Invalid IP"
-    if not _validate_ipv4(cfg.gw):
+    if (cfg.gw or "").strip() and not _validate_ipv4(cfg.gw.strip()):
         return False, "Invalid Gateway"
     if not _validate_prefix(cfg.prefix):
         return False, "Invalid Prefix (0..32)"
+    for dns_ip in (cfg.dns or []):
+        if not _validate_ipv4((dns_ip or "").strip()):
+            return False, f"Invalid DNS server '{dns_ip}'"
     return True, "OK"
 
 
@@ -97,10 +101,30 @@ def apply_static_nmcli(iface: str, cfg: IfaceCfg) -> Dict[str, Any]:
 
     cidr = f"{cfg.ip}/{cfg.prefix}"
     try:
-        _run(["bash", "-lc", f"nmcli con mod '{con}' ipv4.method manual ipv4.addresses '{cidr}' ipv4.gateway '{cfg.gw}' ipv4.dns ''"], check=True)
+        gw = (cfg.gw or "").strip()
+        dns = [d.strip() for d in (cfg.dns or []) if (d or "").strip()]
+        route_metric = 100 if iface == "eth0" else 200
+        never_default = "yes" if not gw else "no"
+
+        _run(["bash", "-lc", f"nmcli con mod '{con}' ipv4.method manual ipv4.addresses '{cidr}'"], check=True)
+        _run(["bash", "-lc", f"nmcli con mod '{con}' ipv4.gateway '{gw}'"], check=True)
+        _run(["bash", "-lc", f"nmcli con mod '{con}' ipv4.never-default '{never_default}'"], check=True)
+        _run(["bash", "-lc", f"nmcli con mod '{con}' ipv4.route-metric '{route_metric}'"], check=True)
+        if dns:
+            _run(
+                ["bash", "-lc", f"nmcli con mod '{con}' ipv4.dns '{' '.join(dns)}' ipv4.ignore-auto-dns yes"],
+                check=True,
+            )
         _run(["bash", "-lc", f"nmcli con down '{con}' || true"], check=False)
         _run(["bash", "-lc", f"nmcli con up '{con}'"], check=True)
-        return {"ok": True, "msg": f"Applied via nmcli on {iface} ({con})", "cidr": cidr, "gw": cfg.gw}
+        return {
+            "ok": True,
+            "msg": f"Applied via nmcli on {iface} ({con})",
+            "cidr": cidr,
+            "gw": gw,
+            "dns": dns,
+            "route_metric": route_metric,
+        }
     except Exception as e:
         return {"ok": False, "msg": f"nmcli apply failed: {repr(e)}"}
 
@@ -118,6 +142,9 @@ def apply_static_dhcpcd(iface: str, cfg: IfaceCfg) -> Dict[str, Any]:
         return {"ok": False, "msg": msg}
 
     cidr = f"{cfg.ip}/{cfg.prefix}"
+    gw = (cfg.gw or "").strip()
+    dns = [d.strip() for d in (cfg.dns or []) if (d or "").strip()]
+    metric = 100 if iface == "eth0" else 200
 
     if not os.path.exists(DHCPCD_PATH):
         return {"ok": False, "msg": f"{DHCPCD_PATH} not found. Install dhcpcd or use nmcli."}
@@ -134,11 +161,15 @@ def apply_static_dhcpcd(iface: str, cfg: IfaceCfg) -> Dict[str, Any]:
         pattern = re.compile(rf"(?ms)^\s*#\s*MAS004-BEGIN\s+{re.escape(iface)}\s*$.*?^\s*#\s*MAS004-END\s+{re.escape(iface)}\s*$\s*")
         txt = re.sub(pattern, "", txt)
 
+        router_line = f"static routers={gw}\n" if gw else ""
+        dns_line = f"static domain_name_servers={' '.join(dns)}\n" if dns else ""
         block = (
             f"# MAS004-BEGIN {iface}\n"
             f"interface {iface}\n"
             f"static ip_address={cidr}\n"
-            f"static routers={cfg.gw}\n"
+            f"{router_line}"
+            f"{dns_line}"
+            f"metric {metric}\n"
             f"# MAS004-END {iface}\n"
         )
 
@@ -151,7 +182,14 @@ def apply_static_dhcpcd(iface: str, cfg: IfaceCfg) -> Dict[str, Any]:
         _run(["bash", "-lc", "systemctl restart dhcpcd || true"], check=False)
         _run(["bash", "-lc", "systemctl restart networking || true"], check=False)
 
-        return {"ok": True, "msg": f"Applied via dhcpcd.conf on {iface} (backup: {backup})", "cidr": cidr, "gw": cfg.gw}
+        return {
+            "ok": True,
+            "msg": f"Applied via dhcpcd.conf on {iface} (backup: {backup})",
+            "cidr": cidr,
+            "gw": gw,
+            "dns": dns,
+            "route_metric": metric,
+        }
     except Exception as e:
         return {"ok": False, "msg": f"dhcpcd apply failed: {repr(e)}"}
 
