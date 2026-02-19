@@ -1,222 +1,147 @@
-# MAS-004 Microtom Interface QuickStart
+# MAS-004_RPI-Databridge QuickStart
 
-Version: 1.0  
-Zielgruppe: Microtom-Entwicklerteam  
-Referenz: `docs/Microtom_Interface.md` (vollstaendige Spezifikation)
+**Dokumentversion:** 3.0  
+**Softwarestand:** MAS-004_RPI-Databridge `0.3.0`  
+**Autor:** Erwin Egli  
+**Datum:** 2026-02-19
 
-## 1. Ziel in 10 Minuten
-Nach diesem QuickStart kann Microtom:
+## 1. Ziel
+In 10-15 Minuten eine funktionsfähige Testverbindung aufbauen zwischen:
 
-1. Kommandos an Raspi senden (`POST /api/inbox`).
-2. Asynchrone Antworten vom Raspi empfangen (`POST /api/inbox` auf Microtom-Seite).
-3. Health fuer Raspi-Watchdog bereitstellen (`GET /health`).
-4. Idempotent und robust mit Retries arbeiten.
+1. Raspi Databridge (`192.168.210.20:8080`)
+2. Microtom Server/Simulator (`192.168.210.10:9090`)
 
-## 2. Minimaler Schnittstellenvertrag
+## 2. Aktuelle URLs
+1. Home: `https://192.168.210.20:8080/`
+2. Test UI: `https://192.168.210.20:8080/ui/test`
+3. Settings UI: `https://192.168.210.20:8080/ui/settings`
+4. API Docs: `https://192.168.210.20:8080/docs`
+5. Raspi Health: `https://192.168.210.20:8080/health`
 
-## 2.1 Microtom -> Raspi
-Endpoint:
+## 3. UI-Schnellüberblick
 
-`POST https://<RPI-IP>:8080/api/inbox`
+### Home
+![Home UI](screenshots/ui_home.png)
 
-Pflicht-Header:
+### Settings
+![Settings UI](screenshots/ui_settings.png)
 
-1. `X-Idempotency-Key: <unique-per-request>`
-2. `Content-Type: application/json`
+### Test UI
+![Test UI](screenshots/ui_test.png)
 
-Optional:
+## 4. Minimal-Setup auf Raspi
 
-1. `X-Shared-Secret: <secret>` (wenn am Raspi aktiviert)
-
-Body (empfohlen):
-```json
-{"cmd":"TTP00002=16"}
+## 4.1 Service prüfen
+```bash
+sudo systemctl status mas004-rpi-databridge.service
 ```
 
-Sofort-Response vom Raspi:
-```json
-{
-  "ok": true,
-  "stored": true,
-  "idempotency_key": "microtom-20260208-0001"
-}
-```
+## 4.2 Peer korrekt setzen
+In `Settings -> Databridge / Microtom` müssen passen:
 
-Wichtig:
+1. `peer_base_url = https://192.168.210.10:9090`
+2. `peer_watchdog_host = 192.168.210.10`
+3. `peer_health_path = /health`
 
-1. Das ist nur die Empfangsbestaetigung, noch nicht das fachliche Ergebnis.
-2. Fachliches Ergebnis kommt asynchron per Callback von Raspi zu Microtom.
+Dann `Save Bridge + Restart`.
 
-## 2.2 Raspi -> Microtom (Callback)
+## 4.3 Shared Secret
+1. Falls aktiv, denselben Wert in Microtom verwenden.
+2. Falls leer, ist Secret-Prüfung deaktiviert.
+
+## 5. Minimal-Setup auf Microtom-Seite
 Microtom muss bereitstellen:
 
-1. `GET /health` -> `2xx`
-2. `POST /api/inbox` -> nimmt Raspi-Resultate an
+1. `GET /health` -> 2xx
+2. `POST /api/inbox` -> nimmt Callback an und gibt 2xx
 
-Callback-Body (vom Raspi):
+## 6. Schnelltest End-to-End
+
+## 6.1 Von Microtom an Raspi senden
+```bash
+curl -k -X POST "https://192.168.210.20:8080/api/inbox" \
+  -H "Content-Type: application/json" \
+  -H "X-Idempotency-Key: qs-0001" \
+  -H "X-Shared-Secret: <SECRET>" \
+  -d "{\"cmd\":\"TTP00002=?\",\"source\":\"microtom\"}"
+```
+
+Erwartung (sofort):
 ```json
-{"msg":"ACK_TTP00002=16","source":"raspi"}
+{"ok":true,"stored":true,"idempotency_key":"qs-0001"}
 ```
 
-Relevante Header:
+Erwartung (asynchron):
+Microtom erhält später Callback auf `POST /api/inbox`.
 
-1. `X-Idempotency-Key` (Raspi-seitiger Outbound-Key)
-2. `X-Correlation-Id` (urspruenglicher Microtom-Key)
+## 6.2 Aus Test-UI senden
+1. `https://192.168.210.20:8080/ui/test` öffnen.
+2. Im Feld **VJ6530** z. B. senden:
+   1. `TTP00002=23`
+   2. oder mehrere: `TTP00002=23, TTP00003=10, TTP00004=11`
+3. In Logs prüfen, ob Weiterleitung zu Microtom erfolgt.
 
-## 3. Nachrichtenformat
+## 7. Wichtige API-Endpunkte (Kurzfassung)
 
-## 3.1 Syntax
-```text
-<PTYPE><PID>=<VALUE>
-```
+### Öffentlich
+1. `GET /health`
+2. `POST /api/inbox`
+3. `GET /api/ui/status/public`
+4. UI-Seiten (`/`, `/docs`, `/ui/params`, `/ui/settings`, `/ui/test`)
 
-Read:
-```text
-<PTYPE><PID>=?
-```
+### Token-geschützt (`X-Token`)
+1. `GET/POST /api/config`
+2. `GET/POST /api/system/network`
+3. `POST /api/test/send`
+4. `POST /api/params/import`
+5. `GET /api/params/list`
+6. `POST /api/params/edit`
+7. `GET/POST /api/ui/logs*`
+8. `GET /api/logfiles/*`
 
-Beispiele:
+Vollständig und detailliert: `docs/Microtom_Interface.md`
 
-1. `TTP00002=?`
-2. `TTP00002=16`
-3. `MAS0026=20`
-4. `LSW1000=1`
+## 8. Zertifikat ohne Browser-Warnung
+Nach IP-Wechsel muss Zertifikat neu erzeugt und importiert werden.
 
-## 3.2 Erfolgs-/Fehlerantworten
-Erfolg:
-
-1. Read: `TTP00002=16`
-2. Write: `ACK_TTP00002=16`
-
-Fehler:
-
-1. `TTP00002=NAK_ReadOnly`
-2. `TTP00002=NAK_UnknownParam`
-3. `TTP00002=NAK_DeviceDown`
-4. `TTP00002=NAK_OutOfRange`
-5. `TTP00002=NAK_DeviceComm`
-
-## 4. Minimal-Implementierung (Python/FastAPI Beispiel)
-Der Code zeigt nur das Minimum fuer Integration.
-
-```python
-from fastapi import FastAPI, Request
-
-app = FastAPI()
-
-@app.get("/health")
-def health():
-    return {"ok": True}
-
-@app.post("/api/inbox")
-async def inbox(request: Request):
-    body = await request.json()
-    correlation = request.headers.get("X-Correlation-Id", "")
-    idem = request.headers.get("X-Idempotency-Key", "")
-    # TODO: dedupe via idem
-    # TODO: correlate response to outgoing request via correlation
-    # body["msg"] contains the business result
-    return {"ok": True}
-```
-
-## 5. Idempotenz und Korrelation (Pflicht fuer Stabilitaet)
-
-## 5.1 Outgoing request (Microtom -> Raspi)
-1. Pro Business-Request eindeutigen Key erzeugen.
-2. Key in `X-Idempotency-Key` senden.
-3. Bei eigenem Retry denselben Key wiederverwenden.
-
-## 5.2 Incoming callback (Raspi -> Microtom)
-1. Callback via `X-Idempotency-Key` deduplizieren.
-2. `X-Correlation-Id` als Join-Key auf ursprünglichen Request verwenden.
-
-Empfohlene Request-Tabelle:
-
-1. `request_id`
-2. `idempotency_key_out`
-3. `state` (`sent`, `accepted`, `completed`, `failed`)
-4. `last_callback_msg`
-5. `updated_ts`
-
-## 6. Schnelltest mit curl
-
-## 6.1 Read senden
+### 8.1 Auf Raspi neues Zertifikat erzeugen
 ```bash
-curl -k -X POST "https://<RPI-IP>:8080/api/inbox" \
-  -H "Content-Type: application/json" \
-  -H "X-Idempotency-Key: qs-read-0001" \
-  -H "X-Shared-Secret: <SECRET>" \
-  -d "{\"cmd\":\"TTP00002=?\"}"
+sudo openssl req -x509 -nodes -newkey rsa:2048 -sha256 -days 825 \
+  -keyout /etc/mas004_rpi_databridge/certs/raspi.key \
+  -out /etc/mas004_rpi_databridge/certs/raspi.crt \
+  -subj "/CN=192.168.210.20" \
+  -addext "subjectAltName=IP:192.168.210.20,IP:127.0.0.1,DNS:raspberrypi"
+sudo systemctl restart mas004-rpi-databridge.service
 ```
 
-## 6.2 Write senden
-```bash
-curl -k -X POST "https://<RPI-IP>:8080/api/inbox" \
-  -H "Content-Type: application/json" \
-  -H "X-Idempotency-Key: qs-write-0001" \
-  -H "X-Shared-Secret: <SECRET>" \
-  -d "{\"cmd\":\"TTP00002=16\"}"
+### 8.2 Zertifikat nach Windows kopieren
+```powershell
+scp pi@192.168.210.20:/etc/mas004_rpi_databridge/certs/raspi.crt "$env:USERPROFILE\Downloads\raspi.crt"
 ```
 
-Erwartung:
-
-1. Sofort `stored=true`.
-2. Kurz danach Callback auf Microtom `/api/inbox` mit `msg`.
-
-## 7. Schnelltest mit Microtom-Simulator
-Simulator-Datei:
-
-`Raspberry-PLC/Microtom-Simulator/microtom_sim.py`
-
-Start:
-```bash
-python microtom_sim.py \
-  --https \
-  --certfile ./microtom.crt \
-  --keyfile ./microtom.key \
-  --raspi https://<RPI-IP>:8080 \
-  --shared-secret "<SECRET>"
+### 8.3 In Root-Store importieren (Admin-PowerShell)
+```powershell
+Import-Certificate -FilePath "$env:USERPROFILE\Downloads\raspi.crt" -CertStoreLocation Cert:\LocalMachine\Root
 ```
 
-Dann in der Konsole eingeben:
+## 9. Schnell-Diagnose
 
-1. `TTP00002=?`
-2. `TTP00002=14`
-3. `MAS0026=20`
-
-## 8. Betrieb und Monitoring
-
-Raspi Service-Logs:
-```bash
-sudo journalctl -u mas004-rpi-databridge.service -f
-```
-
-Outbox-Status:
+### 9.1 Outbox prüfen
 ```bash
 sudo sqlite3 /var/lib/mas004_rpi_databridge/databridge.db \
-  "select id,url,retry_count,datetime(next_attempt_ts,'unixepoch','localtime') from outbox order by id desc limit 20;"
+"SELECT id,url,retry_count,datetime(next_attempt_ts,'unixepoch','localtime') FROM outbox ORDER BY id;"
 ```
 
-Interpretation:
+### 9.2 Service-Log prüfen
+```bash
+sudo journalctl -u mas004-rpi-databridge.service -n 200 --no-pager
+```
 
-1. `retry_count` steigt -> Microtom-Callback-Endpunkt nicht stabil erreichbar.
-2. `No route to host` -> Netzwerkproblem/Routing.
-3. `stored=false` beim Senden -> Idempotency-Key wurde wiederverwendet.
+### 9.3 Häufigste Ursachen
+1. Alte/falsche Peer-URL in Outbox (falsche IP).
+2. Shared-Secret stimmt nicht.
+3. Microtom `/health` nicht erreichbar.
+4. Token fehlt für geschützte API-Aufrufe.
 
-## 9. Go-Live Checkliste
-Vor produktivem Start:
-
-1. Microtom `/health` liefert stabil `2xx`.
-2. Microtom `/api/inbox` ist idempotent und schnell (`2xx` bei Erfolg).
-3. Shared-Secret auf beiden Seiten identisch konfiguriert.
-4. TLS-Strategie definiert (`tls_verify=true` bei gueltigem Zertifikat).
-5. End-to-End Read/Write inkl. Callback und Dedupe getestet.
-6. Monitoring fuer Retries/Backlog aktiv.
-
-## 10. Wenn etwas unklar ist
-Fuer Detailregeln (alle NAK-Faelle, Parserdetails, Retry/Watchdog intern):
-
-1. `docs/Microtom_Interface.md`  
-2. `mas004_rpi_databridge/webui.py` (API-Endpunkte)  
-3. `mas004_rpi_databridge/router.py` (Routing und Callback-Flow)
-
+## 10. Release-Notiz
+1. **v3.0 (2026-02-19):** QuickStart auf `192.168.210.x` aktualisiert, UI-Screenshots, TLS-Zertifikatsablauf, API-Kurzreferenz und Troubleshooting erweitert.
