@@ -21,6 +21,18 @@
 - Optional parallel outbound callback target: `<peer_base_url_secondary>/api/inbox`
 - Health endpoint: `GET /health`
 
+## Deployment Topology
+- TEST Raspberry:
+  - SSH: `pi@10.27.67.69`
+  - UI/API: `https://10.27.67.69:8080`
+  - Policy: default sync target (always keep aligned with local + git)
+- LIVE Raspberry:
+  - SSH: `pi@192.168.1.20`
+  - UI/API: `https://192.168.210.20:8080`
+- Policy: update only on explicit release command
+- Script target metadata can be overridden via environment variables:
+  - `MAS004_TEST_SSH`, `MAS004_LIVE_SSH`, `MAS004_TEST_WEB`, `MAS004_LIVE_WEB`
+
 ## Persistent Paths
 - Config: `/etc/mas004_rpi_databridge/config.json`
 - DB: `/var/lib/mas004_rpi_databridge/databridge.db`
@@ -41,20 +53,18 @@
 
 ## Sync/Support Policy
 - Before and after changes in this repo, run:
-  - `scripts/mas004_multirepo_status.ps1`
-  - `scripts/mas004_multirepo_sync.ps1`
+  - `scripts/mas004_multirepo_status.ps1 -Target test`
+  - `scripts/mas004_multirepo_sync.ps1 -Target test -RestartServices`
 - Never use destructive git commands on Pi repos.
 - If a Pi repo is dirty, do not auto-overwrite; report and require explicit decision.
+- LIVE deployment requires explicit opt-in:
+  - `scripts/mas004_multirepo_sync.ps1 -Target live -AllowLive -RestartServices`
 
 ## Last Reviewed
 - Date: 2026-03-04
 - Local HEAD baseline during creation: `af82b02`
 
 ## Current Sync Snapshot (2026-03-04)
-- Local git: all four repos clean and pushed.
-- Pi git:
-  - `MAS-004_RPI-Databridge` synced to latest main.
-  - `MAS-004_ESP32-PLC-Bridge` dirty and behind 1.
-  - `MAS-004_VJ3350-Ultimate-Bridge` dirty and behind 1.
-  - `MAS-004_VJ6530-ZBC-Bridge` dirty and behind 1.
-- Policy applied: no destructive overwrite of dirty Pi working trees.
+- Local git + all 4 repos: synchronized and clean.
+- Remote status depends on selected target profile (`test` or `live`) and connectivity.
+- Safety policy remains active: no destructive overwrite on dirty Pi trees.

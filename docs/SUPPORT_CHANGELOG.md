@@ -39,6 +39,18 @@
 - Updated Settings UI (`/ui/settings`) to edit secondary peer URL.
 - Updated default/example config files and project context docs.
 
+## 2026-03-04 (TEST/LIVE Deployment Profiles)
+- Added deployment target profile helper:
+  - `scripts/mas004_deploy_targets.ps1`
+- Updated multi-repo scripts to support `-Target test|live`:
+  - `scripts/mas004_multirepo_status.ps1`
+  - `scripts/mas004_multirepo_sync.ps1`
+- TEST (`10.27.67.69`) is now default target for status/sync.
+- LIVE (`192.168.1.20`) is blocked by default and requires:
+  - `-Target live -AllowLive`
+- Added unreachable-target handling so TEST sync can run safely even while test device is not connected.
+- Added optional environment variable overrides for host/web target metadata.
+
 ## Maintenance Rule
 - Add one entry for every change that affects:
   - architecture

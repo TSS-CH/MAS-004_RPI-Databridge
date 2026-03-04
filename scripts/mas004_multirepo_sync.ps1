@@ -1,11 +1,24 @@
-﻿param(
-    [string]$SshHost = "mas004-rpi",
+param(
+    [ValidateSet("test", "live")]
+    [string]$Target = "test",
+    [string]$SshHost = "",
     [switch]$NoPi,
     [switch]$RestartServices,
-    [switch]$DryRun
+    [switch]$DryRun,
+    [switch]$AllowLive
 )
 
 $ErrorActionPreference = "Stop"
+Set-StrictMode -Version Latest
+
+. (Join-Path $PSScriptRoot "mas004_deploy_targets.ps1")
+
+$targetMeta = Get-Mas004TargetMeta -Target $Target
+$resolvedSshHost = Resolve-Mas004SshHost -Target $Target -SshHost $SshHost
+
+if ($Target -eq "live" -and -not $AllowLive) {
+    throw "LIVE sync is blocked by policy. Re-run with -Target live -AllowLive for explicit release deployment."
+}
 
 $mainRepoPath = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $gitRoot = Split-Path $mainRepoPath -Parent
@@ -24,6 +37,18 @@ function Invoke-Step([string]$Message, [scriptblock]$Action) {
         return
     }
     & $Action
+}
+
+function Test-RemoteReachable([string]$SshTarget) {
+    if ($NoPi) {
+        return $false
+    }
+    try {
+        $probe = ssh -o ConnectTimeout=5 $SshTarget "echo MAS004_REMOTE_OK" 2>$null
+        return ($probe -match "MAS004_REMOTE_OK")
+    } catch {
+        return $false
+    }
 }
 
 function Sync-LocalRepo($repo) {
@@ -61,37 +86,59 @@ else
 fi
 '@
     $checkScript = $checkScript.Replace("__REMOTE_PATH__", $repo.Remote)
-    $state = (ssh $SshHost $checkScript | Select-Object -First 1).Trim()
+    $state = ""
+    try {
+        $state = (ssh -o ConnectTimeout=5 $resolvedSshHost $checkScript 2>$null | Select-Object -First 1).Trim()
+    } catch {
+        $state = "REMOTE_UNREACHABLE"
+    }
 
+    if ($state -eq "REMOTE_UNREACHABLE" -or -not $state) {
+        Write-Host "[PI/$Target] $($repo.Name): unreachable host $resolvedSshHost -> skip" -ForegroundColor Yellow
+        return
+    }
     if ($state -eq "REMOTE_MISSING") {
-        Write-Host "[PI] $($repo.Name): missing path $($repo.Remote)" -ForegroundColor Yellow
+        Write-Host "[PI/$Target] $($repo.Name): missing path $($repo.Remote)" -ForegroundColor Yellow
         return
     }
     if ($state -eq "REMOTE_DIRTY") {
-        Write-Host "[PI] $($repo.Name): dirty -> skip pull (manual decision required)" -ForegroundColor Yellow
+        Write-Host "[PI/$Target] $($repo.Name): dirty -> skip pull (manual decision required)" -ForegroundColor Yellow
         return
     }
 
-    Invoke-Step "[PI] $($repo.Name): git pull --ff-only" {
-        ssh $SshHost "cd '$($repo.Remote)' && git pull --ff-only" | Out-Host
+    Invoke-Step "[PI/$Target] $($repo.Name): git pull --ff-only" {
+        ssh $resolvedSshHost "cd '$($repo.Remote)' && git pull --ff-only" | Out-Host
     }
 
     if ($RestartServices) {
-        Invoke-Step "[PI] $($repo.Name): restart $($repo.Service)" {
-            ssh $SshHost "sudo systemctl restart $($repo.Service) && systemctl is-active $($repo.Service)" | Out-Host
+        Invoke-Step "[PI/$Target] $($repo.Name): restart $($repo.Service)" {
+            ssh $resolvedSshHost "sudo systemctl restart $($repo.Service) && systemctl is-active $($repo.Service)" | Out-Host
         }
     }
+}
+
+Write-Host ("Target profile: {0} ({1}) -> {2}" -f $targetMeta.name, $targetMeta.role, $resolvedSshHost) -ForegroundColor Green
+if ($Target -eq "live") {
+    Write-Host "LIVE deployment mode enabled by explicit -AllowLive." -ForegroundColor Yellow
 }
 
 foreach ($repo in $repos) {
     Sync-LocalRepo -repo $repo
 }
 
+$remoteReachable = $false
 if (-not $NoPi) {
+    $remoteReachable = Test-RemoteReachable -SshTarget $resolvedSshHost
+    if (-not $remoteReachable) {
+        Write-Host "[PI/$Target] host unreachable: $resolvedSshHost (local sync completed, remote skipped)" -ForegroundColor Yellow
+    }
+}
+
+if (-not $NoPi -and $remoteReachable) {
     foreach ($repo in $repos) {
         Sync-RemoteRepo -repo $repo
     }
 }
 
 Write-Host "==> Final status" -ForegroundColor Green
-& (Join-Path $PSScriptRoot "mas004_multirepo_status.ps1") -SshHost $SshHost
+& (Join-Path $PSScriptRoot "mas004_multirepo_status.ps1") -Target $Target -SshHost $resolvedSshHost
