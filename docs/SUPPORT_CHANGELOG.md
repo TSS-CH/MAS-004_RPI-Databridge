@@ -34,6 +34,8 @@
 - Extended outbound enqueue/routing to fan out to both configured targets:
   - primary `peer_base_url`
   - optional `peer_base_url_secondary`
+- Added sender behavior for secondary target as best-effort:
+  - failed sends to secondary are dropped (no retry backlog), to protect primary channel latency.
 - Updated Settings UI (`/ui/settings`) to edit secondary peer URL.
 - Updated default/example config files and project context docs.
 

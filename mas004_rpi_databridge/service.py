@@ -52,6 +52,9 @@ def sender_loop(cfg_path: str):
                 time.sleep(0.05)
                 continue
 
+            secondary_base = (getattr(cfg, "peer_base_url_secondary", "") or "").strip().rstrip("/")
+            is_secondary_target = bool(secondary_base) and (job.url or "").startswith(secondary_base + "/")
+
             try:
                 if not (job.url or "").lower().startswith(("http://", "https://")):
                     print(f"[OUTBOX] drop id={job.id} invalid_url={job.url!r}", flush=True)
@@ -68,6 +71,14 @@ def sender_loop(cfg_path: str):
                 outbox.delete(job.id)
 
             except Exception as e:
+                if is_secondary_target:
+                    print(
+                        f"[OUTBOX] drop secondary id={job.id} err={repr(e)} url={job.url}",
+                        flush=True,
+                    )
+                    outbox.delete(job.id)
+                    continue
+
                 rc = job.retry_count + 1
                 next_ts = time.time() + backoff_s(rc, cfg.retry_base_s, cfg.retry_cap_s)
                 print(f"[OUTBOX] FAIL id={job.id} rc={rc} next_in={int(next_ts-time.time())}s err={repr(e)}", flush=True)
