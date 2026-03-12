@@ -187,19 +187,43 @@ class TcpForwarderManager:
     def __init__(self, cfg: Settings):
         self.cfg = cfg
         self.forwarders: List[TcpPortForwarder] = []
+        self._lock = threading.Lock()
 
-    def start(self):
-        rules = build_rules(self.cfg, print)
+    @staticmethod
+    def _rule_sig(rules: List[ForwardRule]) -> List[tuple[str, str, int, str, int]]:
+        return [(r.label, r.listen_ip, r.listen_port, r.target_ip, r.target_port) for r in rules]
+
+    def _apply_rules(self, rules: List[ForwardRule]):
+        self._stop_unlocked()
         if not rules:
             print("[FWD] no forwarding rules active", flush=True)
             return
+
         for rule in rules:
             fwd = TcpPortForwarder(rule, print)
             if fwd.start():
                 self.forwarders.append(fwd)
         print(f"[FWD] active listeners={len(self.forwarders)}", flush=True)
 
+    def start(self):
+        with self._lock:
+            self._apply_rules(build_rules(self.cfg, print))
+
+    def reconcile(self, cfg: Settings):
+        with self._lock:
+            self.cfg = cfg
+            desired_rules = build_rules(cfg, print)
+            active_rules = [fwd.rule for fwd in self.forwarders]
+            if self._rule_sig(desired_rules) == self._rule_sig(active_rules):
+                return
+            print("[FWD] reconcile forwarding listeners", flush=True)
+            self._apply_rules(desired_rules)
+
     def stop(self):
+        with self._lock:
+            self._stop_unlocked()
+
+    def _stop_unlocked(self):
         for fwd in self.forwarders:
             fwd.stop()
         self.forwarders.clear()

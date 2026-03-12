@@ -107,6 +107,16 @@ def router_loop(cfg_path: str):
             time.sleep(1.0)
 
 
+def forwarder_loop(cfg_path: str, fwd_mgr: TcpForwarderManager):
+    while True:
+        try:
+            cfg = Settings.load(cfg_path)
+            fwd_mgr.reconcile(cfg)
+        except Exception as e:
+            print(f"[FWD] reconcile error: {repr(e)}", flush=True)
+        time.sleep(5.0)
+
+
 def main():
     cfg_path = DEFAULT_CFG_PATH
     cfg = Settings.load(cfg_path)
@@ -124,6 +134,8 @@ def main():
         fwd_mgr.start()
     except Exception as e:
         print(f"[FWD] manager error: {repr(e)}", flush=True)
+    fwd_t = threading.Thread(target=forwarder_loop, args=(cfg_path, fwd_mgr), daemon=True)
+    fwd_t.start()
 
     app = build_app(cfg_path)
     app.state.tcp_forwarder_manager = fwd_mgr

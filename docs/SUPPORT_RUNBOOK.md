@@ -31,7 +31,7 @@
 - LIVE update (only if explicitly approved):
   - `ssh pi@192.168.1.20 "cd /opt/MAS-004_RPI-Databridge && git pull --ff-only"`
 - Reinstall package safely after pull (prevents stale `build/` artifacts):
-  - `ssh pi@10.27.67.69 "cd /opt/MAS-004_RPI-Databridge && rm -rf build && ./.venv/bin/python -m pip install --no-cache-dir --force-reinstall ."`
+  - `ssh pi@10.27.67.69 "cd /opt/MAS-004_RPI-Databridge && rm -rf build && ./.venv/bin/python -m pip install --no-deps --no-build-isolation --no-cache-dir --force-reinstall ."`
 - Restart:
   - `ssh pi@10.27.67.69 "sudo systemctl restart mas004-rpi-databridge.service"`
 - Logs:
@@ -54,6 +54,7 @@
 - Shared-secret and peer URL still valid after config changes
 - NTP configured values visible in `/ui/settings` and service logs contain `[NTP]` entries
 - TCP relay listeners started as configured (service logs contain `[FWD] listen ...` for required ports)
+- After reboot, verify that `[FWD]` listeners appear even if `eth0` carrier comes up late and that `[NTP]` retries continue until sync succeeds
 
 ## 6. Ownership
 - Main project owner context: MAS-004_RPI-Databridge

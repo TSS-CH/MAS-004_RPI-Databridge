@@ -117,9 +117,9 @@ set -e
 cd '__REMOTE_PATH__' || exit 2
 rm -rf build
 if [ -x .venv/bin/python ]; then
-  .venv/bin/python -m pip install --no-cache-dir --force-reinstall .
+  .venv/bin/python -m pip install --no-deps --no-build-isolation --no-cache-dir --force-reinstall .
 else
-  python3 -m pip install --user --no-cache-dir --force-reinstall .
+  python3 -m pip install --user --no-deps --no-build-isolation --no-cache-dir --force-reinstall .
 fi
 '@
             $installScript = $installScript.Replace("__REMOTE_PATH__", $repo.Remote)

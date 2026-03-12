@@ -82,6 +82,18 @@
   - forwarding listeners active (`3007`,`3008`,`3009`)
   - NTP sync successful against `10.27.30.201`
 
+## 2026-03-12 (Boot Robustness Fixes)
+- Fixed TEST/LIVE runtime behavior after reboot:
+  - TCP forwarders now reconcile every 5 seconds and retry binds after `eth0` becomes available.
+  - This prevents the boot race where `mas004-rpi-databridge` started before `eth0` had carrier and listeners `3007/3008/3009` stayed down.
+- Improved NTP sync behavior:
+  - command detection now uses explicit executable checks
+  - failed sync attempts now report the real command error instead of the misleading "No supported NTP client found"
+  - after a failed sync, retry happens after 15 seconds instead of waiting the full configured interval
+- Hardened Pi package reinstall in `scripts/mas004_multirepo_sync.ps1`:
+  - uses `--no-deps --no-build-isolation`
+  - avoids dependency downloads during deploy, which is important when the Pi clock is wrong before first NTP sync
+
 ## Maintenance Rule
 - Add one entry for every change that affects:
   - architecture

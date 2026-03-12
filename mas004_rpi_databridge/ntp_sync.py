@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import time
@@ -36,7 +37,7 @@ def _find_cmd(name: str) -> str:
         return p
     for base in ("/usr/sbin", "/sbin", "/usr/bin", "/bin"):
         candidate = f"{base}/{name}"
-        if shutil.which(candidate):
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
             return candidate
     return ""
 
@@ -46,17 +47,21 @@ def sync_once(server: str) -> Tuple[bool, str]:
     if not s:
         return False, "ntp_server empty"
 
+    errors: list[str] = []
+
     ntpdate_cmd = _find_cmd("ntpdate")
     if ntpdate_cmd:
         ok, msg = _run([ntpdate_cmd, "-u", s], timeout_s=30)
         if ok:
             return True, f"ntpdate: {msg}"
+        errors.append(f"ntpdate: {msg}")
 
     busybox_cmd = _find_cmd("busybox")
     if busybox_cmd:
         ok, msg = _run([busybox_cmd, "ntpd", "-q", "-n", "-p", s], timeout_s=40)
         if ok:
             return True, f"busybox ntpd: {msg}"
+        errors.append(f"busybox ntpd: {msg}")
 
     sntp_cmd = _find_cmd("sntp")
     if sntp_cmd:
@@ -64,7 +69,10 @@ def sync_once(server: str) -> Tuple[bool, str]:
         ok, msg = _run([sntp_cmd, "-sS", s], timeout_s=30)
         if ok:
             return True, f"sntp: {msg}"
+        errors.append(f"sntp: {msg}")
 
+    if errors:
+        return False, " | ".join(errors)
     return False, "No supported NTP client found (ntpdate/busybox/sntp)"
 
 
@@ -92,7 +100,12 @@ def ntp_loop(cfg_path: str):
             ok, msg = sync_once(server)
             if ok:
                 print(f"[NTP] sync ok server={server} msg={msg}", flush=True)
+                sleep_s = interval_min * 60
             else:
                 print(f"[NTP] sync FAIL server={server} msg={msg}", flush=True)
+                # Retry quickly after boot/network recovery instead of waiting the full interval.
+                sleep_s = min(interval_min * 60, 15)
+        else:
+            sleep_s = interval_min * 60
 
-        time.sleep(interval_min * 60)
+        time.sleep(max(1, sleep_s))
