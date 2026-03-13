@@ -85,7 +85,7 @@ function Sync-RemoteRepoViaBundle($repo) {
         git -C $repo.Local bundle create $bundlePath main | Out-Host
     }
     Invoke-Step "[PI/$Target] $($repo.Name): copy bundle to Pi" {
-        scp $bundlePath "$resolvedSshHost:/tmp/$([IO.Path]::GetFileName($bundlePath))" | Out-Host
+        scp $bundlePath "${resolvedSshHost}:/tmp/$([IO.Path]::GetFileName($bundlePath))" | Out-Host
     }
     Invoke-Step "[PI/$Target] $($repo.Name): fast-forward via bundle" {
         $remoteBundle = "/tmp/$([IO.Path]::GetFileName($bundlePath))"

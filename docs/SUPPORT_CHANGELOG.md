@@ -14,6 +14,9 @@
   - added new TTO parameters `TTP00064` .. `TTP00072`
 - Added the reusable workbook updater:
   - `..\MAS-004_ZBC-Library\tools\update_tto_workbook.py`
+- Fixed a PowerShell parsing bug in `scripts/mas004_multirepo_sync.ps1`:
+  - bundle-sync `scp` target now uses `${resolvedSshHost}` correctly
+  - without this, TEST sync for repos without a central remote aborted before transfer
 
 ## 2026-03-13 (Configurable Forwarding Ports + ESP Port 3010)
 - TCP forwarding no longer hardcodes device main ports.
