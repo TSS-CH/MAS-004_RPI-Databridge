@@ -5,13 +5,22 @@ import sys
 
 
 def _ensure_repo_on_path():
-    repo_root = Path(__file__).resolve().parents[1]
-    sibling_repo = repo_root.parent / "MAS-004_VJ6530-ZBC-Bridge"
-    package_dir = sibling_repo / "mas004_vj6530_zbc_bridge"
-    if package_dir.exists():
+    candidates = []
+    here = Path(__file__).resolve()
+    candidates.extend(here.parents)
+    cwd = Path.cwd().resolve()
+    candidates.append(cwd)
+    candidates.extend(cwd.parents)
+
+    seen = set()
+    for base in candidates:
+        sibling_repo = base / "MAS-004_VJ6530-ZBC-Bridge"
+        package_dir = sibling_repo / "mas004_vj6530_zbc_bridge"
         sibling_repo_str = str(sibling_repo)
-        if sibling_repo_str not in sys.path:
-            sys.path.insert(0, sibling_repo_str)
+        if package_dir.exists() and sibling_repo_str not in seen:
+            seen.add(sibling_repo_str)
+            if sibling_repo_str not in sys.path:
+                sys.path.insert(0, sibling_repo_str)
 
 
 try:
