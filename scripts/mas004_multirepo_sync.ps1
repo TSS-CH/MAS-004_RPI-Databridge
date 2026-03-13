@@ -89,10 +89,15 @@ function Sync-RemoteRepoViaBundle($repo) {
     }
     Invoke-Step "[PI/$Target] $($repo.Name): fast-forward via bundle" {
         $remoteBundle = "/tmp/$([IO.Path]::GetFileName($bundlePath))"
+        $remoteTempClone = "/tmp/$($repo.Name.ToLowerInvariant().Replace('_', '-'))-clone"
         $script = @'
 set -e
 if [ ! -d '__REMOTE_PATH__/.git' ]; then
-  git clone '__REMOTE_BUNDLE__' '__REMOTE_PATH__'
+  rm -rf '__REMOTE_TEMP_CLONE__'
+  git clone '__REMOTE_BUNDLE__' '__REMOTE_TEMP_CLONE__'
+  sudo rm -rf '__REMOTE_PATH__'
+  sudo mv '__REMOTE_TEMP_CLONE__' '__REMOTE_PATH__'
+  sudo chown -R $(id -un):$(id -gn) '__REMOTE_PATH__'
   cd '__REMOTE_PATH__'
   git checkout main
 else
@@ -102,8 +107,9 @@ else
   git merge --ff-only FETCH_HEAD
 fi
 rm -f '__REMOTE_BUNDLE__'
+rm -rf '__REMOTE_TEMP_CLONE__'
 '@
-        $script = $script.Replace("__REMOTE_PATH__", $repo.Remote).Replace("__REMOTE_BUNDLE__", $remoteBundle)
+        $script = $script.Replace("__REMOTE_PATH__", $repo.Remote).Replace("__REMOTE_BUNDLE__", $remoteBundle).Replace("__REMOTE_TEMP_CLONE__", $remoteTempClone)
         ssh $resolvedSshHost $script | Out-Host
     }
     if (Test-Path $bundlePath) {

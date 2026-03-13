@@ -19,6 +19,9 @@
   - without this, TEST sync for repos without a central remote aborted before transfer
 - Fixed bundle-sync behavior for missing remote paths:
   - `MAS-004_ZBC-Library` can now be created on the Pi from the local bundle when `/opt/MAS-004_ZBC-Library` does not exist yet
+- Fixed bundle-sync permissions for first deploy:
+  - new repos are cloned in `/tmp` and then moved into `/opt/...` via `sudo`
+  - this avoids `Permission denied` when the target folder does not yet exist
 
 ## 2026-03-13 (Configurable Forwarding Ports + ESP Port 3010)
 - TCP forwarding no longer hardcodes device main ports.
