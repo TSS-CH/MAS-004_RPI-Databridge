@@ -1,5 +1,20 @@
 # SUPPORT_CHANGELOG - MAS-004_RPI-Databridge
 
+## 2026-03-13 (6530 Async Primary + Versioned Master Workbook)
+- Added `mas004_rpi_databridge/vj6530_runtime.py` to track whether the 6530 async channel is currently healthy.
+- Refactored `mas004_rpi_databridge/vj6530_async_listener.py`:
+  - async subscription now keeps one live ZBC session and resolves `STATUS[...]`, `TTE`, `TTW` updates from the same summary channel
+  - this avoids the previous second-connection timeout pattern against the real printer
+- `mas004_rpi_databridge/service.py` now treats polling as fallback only:
+  - if async is healthy, periodic `TTE` / `TTW` polling is skipped
+  - polling resumes automatically if async ages out or fails
+- `mas004_rpi_databridge/device_bridge.py` now serves `STATUS[...]` and `IRQ{...}` reads from the Raspi-cached state instead of forcing a live printer roundtrip for every Microtom read.
+- Added background 6530 cache warmup at router startup so the first `TTP` access after a restart is usually already primed.
+- Added a repo-tracked master workbook copy:
+  - `master_data/Parameterliste SAR41-MAS-004_V11.11.25.xlsx`
+  - this is the live-updated workbook with `ESP32 R/W:` and current TTO defaults
+- `/api/params/import` now persists the uploaded workbook as Raspi-side master copy at `/var/lib/mas004_rpi_databridge/master/Parameterliste_master.xlsx`.
+
 ## 2026-03-13 (6530 Polling + Startup Crash Fix)
 - Added `mas004_rpi_databridge/vj6530_poller.py`.
 - The Raspi now polls all workbook-mapped `TTE` / `TTW` states from the real 6530 by reusing one summary read per cycle.

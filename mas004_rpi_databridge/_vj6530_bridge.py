@@ -25,7 +25,22 @@ def _ensure_repo_on_path():
 
 _ensure_repo_on_path()
 from mas004_vj6530_zbc_bridge import ZbcBridgeClient  # type: ignore[attr-defined]
-from mas004_vj6530_zbc_bridge._zbc_library import AsyncSubscriptionId, MessageId, ZbcClient  # type: ignore[attr-defined]
+from mas004_vj6530_zbc_bridge._zbc_library import (  # type: ignore[attr-defined]
+    AsyncSubscriptionId,
+    MessageId,
+    ZbcClient,
+    parse_zbc_mapping,
+    resolve_summary_mappings,
+    summary_to_status_values,
+)
 
 
-__all__ = ["AsyncSubscriptionId", "MessageId", "ZbcBridgeClient", "ZbcClient"]
+__all__ = [
+    "AsyncSubscriptionId",
+    "MessageId",
+    "ZbcBridgeClient",
+    "ZbcClient",
+    "parse_zbc_mapping",
+    "resolve_summary_mappings",
+    "summary_to_status_values",
+]

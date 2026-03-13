@@ -19,6 +19,7 @@ from mas004_rpi_databridge.esp_push_listener import EspPushListenerManager
 from mas004_rpi_databridge.tcp_forwarder import TcpForwarderManager
 from mas004_rpi_databridge.vj6530_async_listener import Vj6530AsyncListener
 from mas004_rpi_databridge.vj6530_poller import Vj6530Poller
+from mas004_rpi_databridge.vj6530_runtime import RUNTIME as VJ6530_RUNTIME
 
 def backoff_s(retry_count: int, base: float, cap: float) -> float:
     n = min(retry_count, 10)
@@ -100,6 +101,7 @@ def router_loop(cfg_path: str):
             params = ParamStore(db)
             logs = LogStore(db)
             router = Router(cfg, inbox, outbox, params, logs)
+            threading.Thread(target=router.device_bridge.warm_device_caches, daemon=True).start()
 
             while True:
                 did_work = router.tick_once()
@@ -136,6 +138,10 @@ def vj6530_poll_loop(cfg_path: str):
         interval_s = max(0.5, float(getattr(cfg, "vj6530_poll_interval_s", 2.0) or 2.0))
 
         if bool(cfg.vj6530_simulation) or not (cfg.vj6530_host or "").strip() or int(cfg.vj6530_port or 0) <= 0:
+            time.sleep(interval_s)
+            continue
+
+        if bool(getattr(cfg, "vj6530_async_enabled", True)) and VJ6530_RUNTIME.async_recent(max(interval_s * 2.0, 45.0)):
             time.sleep(interval_s)
             continue
 
@@ -180,6 +186,7 @@ def vj6530_async_loop(cfg_path: str):
             listener = Vj6530AsyncListener(cfg, params, logs, outbox)
             listener.run_session(session_s=30.0)
         except Exception as e:
+            VJ6530_RUNTIME.mark_async_error(repr(e))
             print(f"[VJ6530-ASYNC] error: {repr(e)}", flush=True)
             time.sleep(2.0)
 

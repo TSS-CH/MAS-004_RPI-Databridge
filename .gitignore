@@ -37,6 +37,8 @@ config.json
 # Uploads, falls mal im Projektordner abgelegt
 uploads/
 *.xlsx
+!master_data/
+!master_data/*.xlsx
 
 # falls jemand config unter scripts/ testet
 scripts/config.json

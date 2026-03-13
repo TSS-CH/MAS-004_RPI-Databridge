@@ -11,7 +11,9 @@
 - Web/API: `mas004_rpi_databridge/webui.py`
 - Message reliability: `inbox.py`, `outbox.py`, `router.py`, `service.py`, `http_client.py`, `watchdog.py`
 - Background ops: `ntp_sync.py` (periodic time sync), `tcp_forwarder.py` (eth0->eth1 TCP relay)
-- Device-state polling: `vj6530_poller.py` (periodic TTO fault/warning sync via one ZBC summary read)
+- Device-state sync:
+  - `vj6530_async_listener.py` (primary async status/error ingestion from the 6530)
+  - `vj6530_poller.py` (slow fallback sync when the async channel is not healthy)
 - Device-initiated ESP push path: `esp_push_listener.py` (eth1 listener for active ESP->Raspi messages)
 - Parameter engine: `params.py`, `params_store.py`, `protocol.py`, `device_bridge.py`
 - Networking helper: `netconfig.py`
@@ -43,6 +45,7 @@
 ## Persistent Paths
 - Config: `/etc/mas004_rpi_databridge/config.json`
 - DB: `/var/lib/mas004_rpi_databridge/databridge.db`
+- Persisted master workbook on Raspi: `/var/lib/mas004_rpi_databridge/master/Parameterliste_master.xlsx`
 
 ## Systemd Service
 - `mas004-rpi-databridge.service`
@@ -66,7 +69,8 @@
   - the MAS workbook `..\Parameterliste SAR41-MAS-004_V11.11.25.xlsx` contains a dedicated `ZBC Mapping:` column for `TTP`, `TTE`, `TTW`
   - the helper `..\MAS-004_ZBC-Library\tools\update_tto_workbook.py` refreshes this column and the added TTO rows from a live printer or saved archive
   - `MAS-004_VJ6530-ZBC-Bridge` now consumes the shared library instead of maintaining a separate transport stack
-  - `TTE` / `TTW` polling is driven from one live summary read and only forwards state changes to Microtom
+  - the workbook now contains a dedicated `ESP32 R/W:` column in addition to Microtom `R/W:`
+  - `TTE` / `TTW` and printer status are primarily updated from the 6530 async channel; polling remains a fallback only
 
 ## Sync/Support Policy
 - Before and after changes in this repo, run:

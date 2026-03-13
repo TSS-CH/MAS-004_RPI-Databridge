@@ -106,6 +106,88 @@ class DeviceBridgeTtoMappingTests(unittest.TestCase):
             self.assertEqual("ACK_TTP00071=9", write_resp)
             self.assertEqual("9", params.get_effective_value("TTP00071"))
 
+    def test_status_mapping_read_uses_cached_param_value(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = DB(str(Path(tmpdir) / "db.sqlite3"))
+            params = ParamStore(db)
+            logs = LogStore(db)
+
+            with db._conn() as c:
+                c.execute(
+                    """INSERT INTO params(
+                        pkey,ptype,pid,min_v,max_v,default_v,unit,rw,esp_rw,dtype,name,format_relevant,
+                        message,possible_cause,effects,remedy,updated_ts
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        "TTP00073",
+                        "TTP",
+                        "00073",
+                        0,
+                        1,
+                        "0",
+                        None,
+                        "R",
+                        "W",
+                        "Bool",
+                        "PrinterOnlineState",
+                        "NO",
+                        None,
+                        None,
+                        None,
+                        None,
+                        now_ts(),
+                    ),
+                )
+                c.execute(
+                    """INSERT INTO param_values(pkey,value,updated_ts) VALUES(?,?,?)""",
+                    ("TTP00073", "1", now_ts()),
+                )
+                c.execute(
+                    """INSERT INTO param_device_map(
+                        pkey, esp_key, zbc_mapping, zbc_message_id, zbc_command_id, zbc_value_codec,
+                        zbc_scale, zbc_offset, ultimate_set_cmd, ultimate_get_cmd, ultimate_var_name, updated_ts
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        "TTP00073",
+                        None,
+                        "STATUS[PRINTER_ONLINE]",
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        now_ts(),
+                    ),
+                )
+
+            cfg = SimpleNamespace(
+                esp_host="",
+                esp_port=0,
+                http_timeout_s=2.0,
+                esp_watchdog_host="",
+                watchdog_timeout_s=1.0,
+                watchdog_down_after=3,
+                vj6530_host="10.0.0.5",
+                vj6530_port=3002,
+                vj3350_host="",
+                vj3350_port=0,
+                esp_simulation=True,
+                vj6530_simulation=False,
+                vj3350_simulation=True,
+            )
+
+            bridge = DeviceBridge(cfg, params, logs)
+            fake = FakeZbcBridgeClient()
+            bridge._zbc_bridge = fake
+
+            read_resp = bridge.execute("vj6530", "TTP00073", "TTP", "read", "?")
+
+            self.assertEqual("TTP00073=1", read_resp)
+            self.assertEqual([], fake.read_calls)
+
 
 if __name__ == "__main__":
     unittest.main()

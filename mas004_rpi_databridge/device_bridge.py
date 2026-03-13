@@ -63,6 +63,18 @@ class DeviceBridge:
             self.logs.log(device, "error", f"live communication failed for {pkey}: {repr(exc)}")
             return f"{pkey}=NAK_DeviceComm"
 
+    def warm_device_caches(self):
+        if self._is_simulation("vj6530"):
+            return
+        if not (self.cfg.vj6530_host or "").strip() or int(self.cfg.vj6530_port or 0) <= 0:
+            return
+        try:
+            self._zbc_bridge.summary_dict(force_refresh=True)
+            self._zbc_bridge.request_current_parameters()
+            self.logs.log("vj6530", "info", "6530 cache warmup complete")
+        except Exception as exc:
+            self.logs.log("vj6530", "info", f"6530 cache warmup skipped: {repr(exc)}")
+
     def _is_simulation(self, device: str) -> bool:
         if device == "esp-plc":
             return bool(self.cfg.esp_simulation)
@@ -125,7 +137,10 @@ class DeviceBridge:
         mapping = self.params.get_device_map(pkey)
         zbc_mapping = (mapping.get("zbc_mapping") or "").strip()
         if zbc_mapping:
+            zbc_upper = zbc_mapping.upper()
             if op == "read":
+                if zbc_upper.startswith("STATUS[") or zbc_upper.startswith("STS[") or zbc_upper.startswith("IRQ{"):
+                    return f"{pkey}={self.params.get_effective_value(pkey)}"
                 resolved = self._zbc_bridge.read_mapped_value(zbc_mapping)
                 if resolved is None:
                     return f"{pkey}=NAK_DeviceBadResponse"
