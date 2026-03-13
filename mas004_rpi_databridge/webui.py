@@ -10,6 +10,7 @@ import html
 import subprocess
 import os
 import re
+import shutil
 import tempfile
 import uuid
 
@@ -25,6 +26,7 @@ from mas004_rpi_databridge.peers import peer_urls
 
 ASSET_DIR = os.path.join(os.path.dirname(__file__), "assets")
 VIDEOJET_LOGO_PATH = os.path.join(ASSET_DIR, "videojet-logo.jpg")
+REPO_MASTER_PARAMS_XLSX = os.path.join(os.path.dirname(os.path.dirname(__file__)), "master_data", "Parameterliste SAR41-MAS-004_V11.11.25.xlsx")
 
 
 def require_token(x_token: Optional[str], cfg: Settings):
@@ -65,6 +67,7 @@ class ConfigUpdate(BaseModel):
     vj6530_simulation: Optional[bool] = None
     vj6530_forward_ports: Optional[str] = None
     vj6530_poll_interval_s: Optional[float] = None
+    vj6530_async_enabled: Optional[bool] = None
     esp_forward_ports: Optional[str] = None
 
     # daily logfile retention
@@ -101,6 +104,7 @@ class ParamEdit(BaseModel):
     min_v: Optional[float] = None
     max_v: Optional[float] = None
     rw: Optional[str] = None
+    esp_rw: Optional[str] = None
 
 
 class TestSendReq(BaseModel):
@@ -118,6 +122,9 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
     inbox = Inbox(db)
     params = ParamStore(db)
     logs = LogStore(db)
+    if not os.path.exists(cfg.master_params_xlsx_path) and os.path.exists(REPO_MASTER_PARAMS_XLSX):
+        os.makedirs(os.path.dirname(cfg.master_params_xlsx_path), exist_ok=True)
+        shutil.copyfile(REPO_MASTER_PARAMS_XLSX, cfg.master_params_xlsx_path)
     test_sources = {"raspi", "esp-plc", "vj3350", "vj6530"}
     default_ptype_hint = {"raspi": "", "esp-plc": "MAS", "vj3350": "LSE", "vj6530": "TTE"}
 
@@ -343,6 +350,18 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
 </html>
         """
 
+    def get_master_workbook_info() -> dict[str, Any]:
+        cfg2 = Settings.load(cfg_path)
+        path = cfg2.master_params_xlsx_path
+        exists = os.path.exists(path)
+        stat = os.stat(path) if exists else None
+        return {
+            "path": path,
+            "exists": exists,
+            "size_bytes": int(stat.st_size) if stat else 0,
+            "mtime_iso": datetime.fromtimestamp(stat.st_mtime).isoformat(timespec="seconds") if stat else None,
+        }
+
     @app.get("/ui", response_class=HTMLResponse)
     def ui():
         return home()
@@ -398,7 +417,8 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
                     "port": cfg2.vj6530_port,
                     "simulation": cfg2.vj6530_simulation,
                     "forward_ports": getattr(cfg2, "vj6530_forward_ports", ""),
-                    "poll_interval_s": getattr(cfg2, "vj6530_poll_interval_s", 2.0),
+                    "poll_interval_s": getattr(cfg2, "vj6530_poll_interval_s", 15.0),
+                    "async_enabled": bool(getattr(cfg2, "vj6530_async_enabled", True)),
                 },
             }
         }
@@ -432,9 +452,9 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
         cfg2.ntp_sync_interval_min = max(1, min(24 * 60, cfg2.ntp_sync_interval_min))
 
         try:
-            cfg2.vj6530_poll_interval_s = float(getattr(cfg2, "vj6530_poll_interval_s", 2.0) or 2.0)
+            cfg2.vj6530_poll_interval_s = float(getattr(cfg2, "vj6530_poll_interval_s", 15.0) or 15.0)
         except Exception:
-            cfg2.vj6530_poll_interval_s = 2.0
+            cfg2.vj6530_poll_interval_s = 15.0
         cfg2.vj6530_poll_interval_s = max(0.5, min(300.0, cfg2.vj6530_poll_interval_s))
 
         for k in ("esp_forward_ports", "vj3350_forward_ports", "vj6530_forward_ports"):
@@ -716,12 +736,37 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
 
         try:
             res = params.import_xlsx(tmp_path)
+            if res.get("ok"):
+                master_path = cfg2.master_params_xlsx_path
+                os.makedirs(os.path.dirname(master_path), exist_ok=True)
+                shutil.copyfile(tmp_path, master_path)
+                res["master_workbook"] = get_master_workbook_info()
             return res
         finally:
             try:
                 os.unlink(tmp_path)
             except Exception:
                 pass
+
+    @app.get("/api/params/master/info")
+    def params_master_info(x_token: Optional[str] = Header(default=None)):
+        cfg2 = Settings.load(cfg_path)
+        require_token(x_token, cfg2)
+        return {"ok": True, "master_workbook": get_master_workbook_info()}
+
+    @app.get("/api/params/master/download")
+    def params_master_download(x_token: Optional[str] = Header(default=None)):
+        cfg2 = Settings.load(cfg_path)
+        require_token(x_token, cfg2)
+        info = get_master_workbook_info()
+        if not info["exists"]:
+            raise HTTPException(status_code=404, detail="Master workbook not stored on Raspi")
+        filename = os.path.basename(info["path"])
+        return FileResponse(
+            info["path"],
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=filename,
+        )
 
     @app.get("/api/params/export")
     def params_export(
@@ -762,6 +807,7 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
             min_v=req.min_v,
             max_v=req.max_v,
             rw=req.rw,
+            esp_rw=req.esp_rw,
         )
         if not ok:
             raise HTTPException(status_code=400, detail=msg)
@@ -907,15 +953,20 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
       <button class="btn" onclick="load()">Reload</button>
       <button class="btn" onclick="exportXlsx()">Export XLSX</button>
       <button class="btn" onclick="importXlsx()">Import XLSX</button>
+      <button class="btn" onclick="downloadMaster()">Download Master XLSX</button>
       <span id="status" class="muted"></span>
     </div>
+  </div>
+
+  <div class="row">
+    <span class="pill" id="masterInfo">Master workbook: loading...</span>
   </div>
 
   <h3>Liste</h3>
   <table>
     <thead>
       <tr>
-        <th>pkey</th><th>min</th><th>max</th><th>default</th><th>rw</th>
+        <th>pkey</th><th>min</th><th>max</th><th>default</th><th>rw</th><th>esp_rw</th>
         <th>current</th><th>effective</th><th>name</th><th>message</th><th>edit</th>
       </tr>
     </thead>
@@ -971,18 +1022,20 @@ async function load(){
       <td>${it.max_v ?? ""}</td>
       <td>${it.default_v ?? ""}</td>
       <td>${it.rw ?? ""}</td>
+      <td>${it.esp_rw ?? ""}</td>
       <td>${it.current_v ?? ""}</td>
       <td>${it.effective_v ?? ""}</td>
       <td>${it.name ?? ""}</td>
       <td>${it.message ?? ""}</td>
-      <td><button class="btn" onclick="edit('${it.pkey}','${it.min_v ?? ""}','${it.max_v ?? ""}','${it.default_v ?? ""}','${it.rw ?? ""}')">edit</button></td>
+      <td><button class="btn" onclick="edit('${it.pkey}','${it.min_v ?? ""}','${it.max_v ?? ""}','${it.default_v ?? ""}','${it.rw ?? ""}','${it.esp_rw ?? ""}')">edit</button></td>
     `;
     tb.appendChild(tr);
   }
+  await refreshMasterInfo();
   document.getElementById("status").textContent = `ok: ${j.items.length} items`;
 }
 
-async function edit(pkey, minv, maxv, defv, rw){
+async function edit(pkey, minv, maxv, defv, rw, espRw){
   const nmin = prompt(`min_v fuer ${pkey}`, minv);
   if(nmin === null) return;
   const nmax = prompt(`max_v fuer ${pkey}`, maxv);
@@ -991,13 +1044,16 @@ async function edit(pkey, minv, maxv, defv, rw){
   if(ndef === null) return;
   const nrw = prompt(`rw fuer ${pkey} (R / W / R/W)`, rw);
   if(nrw === null) return;
+  const nespRw = prompt(`esp_rw fuer ${pkey} (R / W / N)`, espRw);
+  if(nespRw === null) return;
 
   const payload = {
     pkey: pkey,
     min_v: (nmin.trim()===""? null : Number(nmin)),
     max_v: (nmax.trim()===""? null : Number(nmax)),
     default_v: (ndef.trim()===""? null : ndef),
-    rw: (nrw.trim()===""? null : nrw)
+    rw: (nrw.trim()===""? null : nrw),
+    esp_rw: (nespRw.trim()===""? null : nespRw)
   };
 
   document.getElementById("status").textContent = "saving...";
@@ -1021,6 +1077,33 @@ async function importXlsx(){
   if(!r.ok){ alert("Import Fehler: " + txt); return; }
   document.getElementById("status").textContent = "import ok";
   await load();
+}
+
+async function refreshMasterInfo(){
+  try{
+    const j = await api("/api/params/master/info");
+    const m = j.master_workbook || {};
+    document.getElementById("masterInfo").textContent =
+      m.exists
+        ? `Master workbook: ${m.path} | ${m.mtime_iso || "-"} | ${m.size_bytes || 0} bytes`
+        : `Master workbook: nicht auf Raspi gespeichert (${m.path || "-"})`;
+  }catch(e){
+    document.getElementById("masterInfo").textContent = `Master workbook: Fehler - ${e.message}`;
+  }
+}
+
+function downloadMaster(){
+  (async ()=>{
+    const t = getToken();
+    const r = await fetch("/api/params/master/download", {headers: t?{"X-Token":t}:{}} );
+    if(!r.ok){ alert("Master Download Fehler: " + await r.text()); return; }
+    const blob = await r.blob();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "Parameterliste_master.xlsx";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  })();
 }
 
 function exportXlsx(){
@@ -1291,6 +1374,10 @@ load();
       <label class="checkline"><input type="checkbox" id="vj6530_simulation"/>Simulation</label>
     </div>
     <div class="actions">
+      <label class="checkline"><input type="checkbox" id="vj6530_async_enabled"/>VJ6530 async ZBC Events aktiv</label>
+      <span class="muted">Async ist der Primaerpfad fuer Online/Offline/Warning/Fault/Buzy/Print-Events. Polling bleibt als Fallback.</span>
+    </div>
+    <div class="actions">
       <button onclick="saveDevices()">Save Devices + Restart</button>
       <span id="dev_status" class="muted"></span>
     </div>
@@ -1472,8 +1559,9 @@ async function reloadAll(){
   document.getElementById("vj6530_host").value = c.vj6530_host || "";
   document.getElementById("vj6530_port").value = c.vj6530_port ?? "";
   document.getElementById("vj6530_forward_ports").value = c.vj6530_forward_ports || "";
-  document.getElementById("vj6530_poll_interval_s").value = c.vj6530_poll_interval_s ?? 2.0;
+  document.getElementById("vj6530_poll_interval_s").value = c.vj6530_poll_interval_s ?? 15.0;
   document.getElementById("vj6530_simulation").checked = !!c.vj6530_simulation;
+  document.getElementById("vj6530_async_enabled").checked = !!(c.vj6530_async_enabled ?? true);
   document.getElementById("logs_keep_days_all").value = c.logs_keep_days_all ?? 30;
   document.getElementById("logs_keep_days_esp").value = c.logs_keep_days_esp ?? 30;
   document.getElementById("logs_keep_days_tto").value = c.logs_keep_days_tto ?? 30;
@@ -1581,7 +1669,8 @@ async function saveDevices(){
     vj6530_port: Number(document.getElementById("vj6530_port").value.trim()),
     vj6530_forward_ports: document.getElementById("vj6530_forward_ports").value.trim(),
     vj6530_poll_interval_s: Number(document.getElementById("vj6530_poll_interval_s").value.trim()),
-    vj6530_simulation: document.getElementById("vj6530_simulation").checked
+    vj6530_simulation: document.getElementById("vj6530_simulation").checked,
+    vj6530_async_enabled: document.getElementById("vj6530_async_enabled").checked
   };
   await api("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)});
   document.getElementById("dev_status").textContent = "saved (service restarted)";

@@ -1,5 +1,6 @@
 {
   "db_path": "/var/lib/mas004_rpi_databridge/databridge.db",
+  "master_params_xlsx_path": "/var/lib/mas004_rpi_databridge/master/Parameterliste_master.xlsx",
   "webui_host": "0.0.0.0",
   "webui_port": 8080,
 
@@ -50,7 +51,8 @@
   "vj6530_port": 3002,
   "vj6530_forward_ports": "",
   "vj6530_simulation": false,
-  "vj6530_poll_interval_s": 2.0,
+  "vj6530_poll_interval_s": 15.0,
+  "vj6530_async_enabled": true,
 
   "logs_keep_days_all": 30,
   "logs_keep_days_esp": 30,

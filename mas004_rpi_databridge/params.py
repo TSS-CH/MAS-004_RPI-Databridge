@@ -55,6 +55,30 @@ def _norm_header(s: str) -> str:
     return s.strip("_")
 
 
+def _normalize_microtom_rw(value: str | None) -> Optional[str]:
+    raw = _to_clean_str(value)
+    if raw is None:
+        return None
+    norm = raw.upper().replace("_", "/")
+    if norm == "RW":
+        norm = "R/W"
+    if norm in ("R", "W", "R/W", "N"):
+        return norm
+    return raw.upper()
+
+
+def _normalize_esp_rw(value: str | None) -> str:
+    raw = _to_clean_str(value)
+    if raw is None:
+        return "W"
+    norm = raw.upper().replace("_", "/")
+    if norm == "RW":
+        norm = "R/W"
+    if norm in ("R", "W", "R/W", "N"):
+        return norm
+    return "W"
+
+
 class ParamStore:
     def __init__(self, db: DB):
         self.db = db
@@ -96,6 +120,7 @@ class ParamStore:
         c_def = col_any("Default Value", "Default Value:", "Default")
         c_unit = col_any("Einheit", "Unit")
         c_rw = col_any("R/W:", "R/W", "RW", "R_W")
+        c_esp_rw = col_any("ESP32 R/W:", "ESP32 R/W", "ESP R/W:", "ESP R/W", "ESP_RW")
         c_dtype = col_any("Data Type", "DataType", "Datatype")
         c_name = col_any("Name")
         c_fmt = col_any("Format relevant?", "Format relevant", "Format")
@@ -155,7 +180,8 @@ class ParamStore:
                 max_v = _to_float(ws.cell(r, c_max).value) if c_max else None
                 default_v = _to_str(ws.cell(r, c_def).value) if c_def else None
                 unit = _to_str(ws.cell(r, c_unit).value) if c_unit else None
-                rw = _to_str(ws.cell(r, c_rw).value) if c_rw else None
+                rw = _normalize_microtom_rw(_to_str(ws.cell(r, c_rw).value) if c_rw else None)
+                esp_rw = _normalize_esp_rw(_to_str(ws.cell(r, c_esp_rw).value) if c_esp_rw else "W")
                 dtype = _to_str(ws.cell(r, c_dtype).value) if c_dtype else None
                 name = _to_str(ws.cell(r, c_name).value) if c_name else None
                 fmt = _to_str(ws.cell(r, c_fmt).value) if c_fmt else None
@@ -170,21 +196,21 @@ class ParamStore:
                 if exists:
                     c.execute(
                         """UPDATE params SET
-                           ptype=?, pid=?, min_v=?, max_v=?, default_v=?, unit=?, rw=?, dtype=?,
+                           ptype=?, pid=?, min_v=?, max_v=?, default_v=?, unit=?, rw=?, esp_rw=?, dtype=?,
                            name=?, format_relevant=?, message=?, possible_cause=?, effects=?, remedy=?,
                            updated_ts=?
                            WHERE pkey=?""",
-                        (ptype, pid, min_v, max_v, default_v, unit, rw, dtype, name, fmt, msg, cause, eff, rem, ts, pkey),
+                        (ptype, pid, min_v, max_v, default_v, unit, rw, esp_rw, dtype, name, fmt, msg, cause, eff, rem, ts, pkey),
                     )
                     updated += 1
                 else:
                     c.execute(
                         """INSERT INTO params(
-                           pkey,ptype,pid,min_v,max_v,default_v,unit,rw,dtype,name,format_relevant,
+                           pkey,ptype,pid,min_v,max_v,default_v,unit,rw,esp_rw,dtype,name,format_relevant,
                            message,possible_cause,effects,remedy,updated_ts
                            )
-                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                        (pkey, ptype, pid, min_v, max_v, default_v, unit, rw, dtype, name, fmt, msg, cause, eff, rem, ts),
+                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (pkey, ptype, pid, min_v, max_v, default_v, unit, rw, esp_rw, dtype, name, fmt, msg, cause, eff, rem, ts),
                     )
                     inserted += 1
 
@@ -246,13 +272,13 @@ class ParamStore:
     def get_meta(self, pkey: str) -> Optional[Dict[str, Any]]:
         with self.db._conn() as c:
             row = c.execute(
-                """SELECT pkey,ptype,pid,min_v,max_v,default_v,unit,rw,dtype,name,format_relevant,message
+                """SELECT pkey,ptype,pid,min_v,max_v,default_v,unit,rw,esp_rw,dtype,name,format_relevant,message
                    FROM params WHERE pkey=?""",
                 (pkey,),
             ).fetchone()
         if not row:
             return None
-        keys = ["pkey", "ptype", "pid", "min_v", "max_v", "default_v", "unit", "rw", "dtype", "name", "format_relevant", "message"]
+        keys = ["pkey", "ptype", "pid", "min_v", "max_v", "default_v", "unit", "rw", "esp_rw", "dtype", "name", "format_relevant", "message"]
         return dict(zip(keys, row))
 
     def get_device_map(self, pkey: str) -> Dict[str, Any]:
@@ -295,14 +321,39 @@ class ParamStore:
         dv = (meta or {}).get("default_v")
         return dv if dv is not None else "0"
 
-    def validate_write(self, pkey: str, value: str) -> Tuple[bool, str]:
+    def actor_access(self, pkey: str, actor: str = "microtom") -> str:
+        meta = self.get_meta(pkey)
+        if not meta:
+            return "N"
+        actor_name = (actor or "microtom").strip().lower()
+        if actor_name in ("esp", "esp32", "esp-plc"):
+            return _normalize_esp_rw(meta.get("esp_rw"))
+        return _normalize_microtom_rw(meta.get("rw")) or "W"
+
+    def can_actor_read(self, pkey: str, actor: str = "microtom") -> bool:
+        access = self.actor_access(pkey, actor=actor)
+        return access != "N"
+
+    def can_actor_write(self, pkey: str, actor: str = "microtom") -> bool:
+        access = self.actor_access(pkey, actor=actor)
+        return access in ("W", "R/W")
+
+    def validate_read(self, pkey: str, actor: str = "microtom") -> Tuple[bool, str]:
+        meta = self.get_meta(pkey)
+        if not meta:
+            return False, "NAK_UnknownParam"
+        if not self.can_actor_read(pkey, actor=actor):
+            return False, "NAK_NoAccess"
+        return True, "OK"
+
+    def validate_write(self, pkey: str, value: str, actor: str = "microtom") -> Tuple[bool, str]:
         meta = self.get_meta(pkey)
         if not meta:
             return False, "NAK_UnknownParam"
 
-        rw = (meta.get("rw") or "").strip().upper()
-        if rw == "R":
-            return False, "NAK_ReadOnly"
+        if not self.can_actor_write(pkey, actor=actor):
+            access = self.actor_access(pkey, actor=actor)
+            return False, "NAK_NoAccess" if access == "N" else "NAK_ReadOnly"
 
         min_v = meta.get("min_v")
         max_v = meta.get("max_v")
@@ -317,8 +368,8 @@ class ParamStore:
             pass
         return True, "OK"
 
-    def set_value(self, pkey: str, value: str) -> Tuple[bool, str]:
-        ok, msg = self.validate_write(pkey, value)
+    def set_value(self, pkey: str, value: str, actor: str = "microtom") -> Tuple[bool, str]:
+        ok, msg = self.validate_write(pkey, value, actor=actor)
         if not ok:
             return ok, msg
 
@@ -371,6 +422,7 @@ class ParamStore:
         min_v: Optional[float] = None,
         max_v: Optional[float] = None,
         rw: Optional[str] = None,
+        esp_rw: Optional[str] = None,
     ) -> Tuple[bool, str]:
         meta = self.get_meta(pkey)
         if not meta:
@@ -380,15 +432,19 @@ class ParamStore:
         new_max = meta.get("max_v") if max_v is None else max_v
         new_def = meta.get("default_v") if default_v is None else str(default_v)
         new_rw = meta.get("rw") if rw is None else str(rw).strip()
+        new_esp_rw = meta.get("esp_rw") if esp_rw is None else str(esp_rw).strip()
 
         # rw normalisieren
         if new_rw is not None:
-            rwu = new_rw.strip().upper()
-            if rwu in ("RW", "R_W", "R/W"):
-                rwu = "R/W"
-            if rwu not in ("R", "W", "R/W", ""):
+            rwu = _normalize_microtom_rw(new_rw)
+            if rwu not in ("R", "W", "R/W", "N", None):
                 return False, "NAK_BadRW"
-            new_rw = rwu if rwu else None
+            new_rw = rwu
+        if new_esp_rw is not None:
+            erwu = _normalize_esp_rw(new_esp_rw)
+            if erwu not in ("R", "W", "R/W", "N"):
+                return False, "NAK_BadEspRW"
+            new_esp_rw = erwu
 
         # min/max check
         if new_min is not None and new_max is not None:
@@ -409,9 +465,9 @@ class ParamStore:
         with self.db._conn() as c:
             c.execute(
                 """UPDATE params
-                   SET default_v=?, min_v=?, max_v=?, rw=?, updated_ts=?
+                   SET default_v=?, min_v=?, max_v=?, rw=?, esp_rw=?, updated_ts=?
                    WHERE pkey=?""",
-                (new_def, new_min, new_max, new_rw, now_ts(), pkey),
+                (new_def, new_min, new_max, new_rw, new_esp_rw, now_ts(), pkey),
             )
         return True, "OK"
 
@@ -431,7 +487,7 @@ class ParamStore:
             args.extend([q2, q2, q2])
 
         wsql = ("WHERE " + " AND ".join(where)) if where else ""
-        sql = f"""SELECT p.pkey,p.ptype,p.pid,p.min_v,p.max_v,p.default_v,p.unit,p.rw,p.dtype,p.name,p.message,
+        sql = f"""SELECT p.pkey,p.ptype,p.pid,p.min_v,p.max_v,p.default_v,p.unit,p.rw,p.esp_rw,p.dtype,p.name,p.message,
                          m.esp_key,m.zbc_mapping,m.zbc_message_id,m.zbc_command_id,m.zbc_value_codec,m.zbc_scale,m.zbc_offset,
                          m.ultimate_set_cmd,m.ultimate_get_cmd,m.ultimate_var_name
                   FROM params p
@@ -461,19 +517,20 @@ class ParamStore:
                     "effective_v": eff,
                     "unit": r[6],
                     "rw": r[7],
-                    "dtype": r[8],
-                    "name": r[9],
-                    "message": r[10],
-                    "esp_key": r[11],
-                    "zbc_mapping": r[12],
-                    "zbc_message_id": r[13],
-                    "zbc_command_id": r[14],
-                    "zbc_value_codec": r[15],
-                    "zbc_scale": r[16],
-                    "zbc_offset": r[17],
-                    "ultimate_set_cmd": r[18],
-                    "ultimate_get_cmd": r[19],
-                    "ultimate_var_name": r[20],
+                    "esp_rw": r[8],
+                    "dtype": r[9],
+                    "name": r[10],
+                    "message": r[11],
+                    "esp_key": r[12],
+                    "zbc_mapping": r[13],
+                    "zbc_message_id": r[14],
+                    "zbc_command_id": r[15],
+                    "zbc_value_codec": r[16],
+                    "zbc_scale": r[17],
+                    "zbc_offset": r[18],
+                    "ultimate_set_cmd": r[19],
+                    "ultimate_get_cmd": r[20],
+                    "ultimate_var_name": r[21],
                 }
             )
         return out
@@ -495,6 +552,7 @@ class ParamStore:
             "Effective Value",
             "Einheit",
             "R/W:",
+            "ESP32 R/W:",
             "Data Type",
             "Name",
             "Message",
@@ -523,6 +581,7 @@ class ParamStore:
                     r.get("effective_v"),
                     r.get("unit"),
                     r.get("rw"),
+                    r.get("esp_rw"),
                     r.get("dtype"),
                     r.get("name"),
                     r.get("message"),

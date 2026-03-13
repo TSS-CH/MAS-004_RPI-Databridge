@@ -7,7 +7,7 @@ from mas004_rpi_databridge.inbox import Inbox
 from mas004_rpi_databridge.outbox import Outbox
 from mas004_rpi_databridge.params import ParamStore
 from mas004_rpi_databridge.logstore import LogStore
-from mas004_rpi_databridge.protocol import parse_operation_line
+from mas004_rpi_databridge.protocol import parse_operation_line, parse_param_line
 from mas004_rpi_databridge.peers import peer_urls
 
 
@@ -75,11 +75,26 @@ class Router:
         self.logs.log("raspi", "in", f"microtom: {line}")
         self.logs.log(dev, "in", f"raspi-> {dev}: {line}")
 
-        resp = self.device_bridge.execute(device=dev, pkey=pkey, ptype=ptype, op=op, value=value)
+        resp = self.device_bridge.execute(device=dev, pkey=pkey, ptype=ptype, op=op, value=value, actor="microtom")
         self.logs.log(dev, "out", f"{dev}->raspi: {resp}")
         self.logs.log("raspi", "out", f"to microtom: {resp}")
         self._enqueue_to_microtom(resp, correlation=correlation)
+        self._mirror_success_to_esp(pkey, resp)
         return resp
+
+    def _mirror_success_to_esp(self, pkey: str, response_line: str):
+        parsed = parse_param_line(response_line)
+        if not parsed or parsed.ptype is None or parsed.value is None:
+            return
+        if parsed.value.upper().startswith("NAK"):
+            return
+        if not self.params.can_actor_read(pkey, actor="esp32"):
+            return
+        ok, detail = self.device_bridge.mirror_to_esp(pkey, parsed.value)
+        if ok:
+            self.logs.log("raspi", "out", f"forward to esp-plc: {pkey}={parsed.value}")
+        else:
+            self.logs.log("raspi", "info", f"skip esp mirror for {pkey}: {detail}")
 
     def tick_once(self) -> bool:
         msg = self.inbox.claim_next_pending()

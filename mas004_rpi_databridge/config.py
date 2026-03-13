@@ -8,6 +8,7 @@ DEFAULT_CFG_PATH = "/etc/mas004_rpi_databridge/config.json"
 class Settings:
     # Storage
     db_path: str = "/var/lib/mas004_rpi_databridge/databridge.db"
+    master_params_xlsx_path: str = "/var/lib/mas004_rpi_databridge/master/Parameterliste_master.xlsx"
 
     # Web UI
     webui_host: str = "0.0.0.0"
@@ -66,7 +67,8 @@ class Settings:
     vj6530_port: int = 0
     vj6530_simulation: bool = True
     vj6530_forward_ports: str = ""
-    vj6530_poll_interval_s: float = 2.0
+    vj6530_poll_interval_s: float = 15.0
+    vj6530_async_enabled: bool = True
     esp_forward_ports: str = ""
 
     # Daily log-file retention (days)

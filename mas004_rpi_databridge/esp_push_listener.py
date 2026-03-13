@@ -6,11 +6,12 @@ from typing import Callable
 
 from mas004_rpi_databridge.config import Settings
 from mas004_rpi_databridge.db import DB
+from mas004_rpi_databridge.device_bridge import DeviceBridge
 from mas004_rpi_databridge.logstore import LogStore
 from mas004_rpi_databridge.outbox import Outbox
 from mas004_rpi_databridge.params import ParamStore
 from mas004_rpi_databridge.peers import peer_urls
-from mas004_rpi_databridge.protocol import parse_operation_line
+from mas004_rpi_databridge.protocol import parse_operation_line, parse_param_line
 
 
 def _is_ipv4(s: str) -> bool:
@@ -29,6 +30,17 @@ def _configure_socket(sock: socket.socket, *, set_timeout: bool = True):
         pass
     if set_timeout:
         sock.settimeout(1.0)
+
+
+def _channel_for_ptype(ptype: str) -> str:
+    ptype = (ptype or "").upper()
+    if ptype.startswith("TT"):
+        return "vj6530"
+    if ptype.startswith("LS"):
+        return "vj3350"
+    if ptype.startswith("MA"):
+        return "esp-plc"
+    return "raspi"
 
 
 class EspPushListener:
@@ -118,6 +130,7 @@ class EspPushListener:
         params = ParamStore(db)
         outbox = Outbox(db)
         logs = LogStore(db)
+        bridge = DeviceBridge(self.cfg, params, logs)
 
         logs.log("esp-plc", "in", f"esp->raspi: {line}")
         logs.log("raspi", "in", f"esp-plc push: {line}")
@@ -128,35 +141,49 @@ class EspPushListener:
             return "NAK_Syntax"
 
         ptype, pid, op, value = parsed
-        if not ptype.startswith("MA"):
-            resp = f"{ptype}{pid}=NAK_UnsupportedParamType"
-            logs.log("esp-plc", "out", f"raspi->esp: {resp}")
-            return resp
-
         pkey = f"{ptype}{pid}"
         if not params.get_meta(pkey):
             resp = f"{pkey}=NAK_UnknownParam"
             logs.log("esp-plc", "out", f"raspi->esp: {resp}")
             return resp
 
-        if op == "read":
-            resp = f"{pkey}={params.get_effective_value(pkey)}"
+        dev = _channel_for_ptype(ptype)
+        if dev == "raspi":
+            resp = f"{pkey}=NAK_UnsupportedParamType"
             logs.log("esp-plc", "out", f"raspi->esp: {resp}")
             return resp
 
-        ok, msg = params.apply_device_value(pkey, value)
-        if not ok:
-            resp = f"{pkey}={msg}"
+        if op == "read":
+            resp = bridge.execute(device=dev, pkey=pkey, ptype=ptype, op="read", value="?", actor="esp32")
             logs.log("esp-plc", "out", f"raspi->esp: {resp}")
             return resp
+
+        if ptype.startswith("MA"):
+            ok, msg = params.apply_device_value(pkey, value)
+            if not ok:
+                resp = f"{pkey}={msg}"
+                logs.log("esp-plc", "out", f"raspi->esp: {resp}")
+                return resp
+            forwarded_line = line
+        else:
+            resp = bridge.execute(device=dev, pkey=pkey, ptype=ptype, op="write", value=value, actor="esp32")
+            logs.log(dev, "out", f"{dev}->raspi: {resp}")
+            if "NAK" in resp.upper():
+                logs.log("esp-plc", "out", f"raspi->esp: {resp}")
+                return resp
+            parsed_resp = parse_param_line(resp)
+            if not parsed_resp or parsed_resp.ptype is None or parsed_resp.value is None:
+                logs.log("esp-plc", "out", f"raspi->esp: {resp}")
+                return resp
+            forwarded_line = f"{parsed_resp.ptype}{parsed_resp.pid}={parsed_resp.value}"
 
         targets = peer_urls(self.cfg, "/api/inbox")
         if not targets:
             logs.log("raspi", "error", f"no peer_base_url configured; cannot forward ESP push {line}")
         else:
             for url in targets:
-                outbox.enqueue("POST", url, {}, {"msg": line, "source": "raspi", "origin": "esp-plc"}, None)
-            logs.log("raspi", "out", f"forward to microtom: {line}")
+                outbox.enqueue("POST", url, {}, {"msg": forwarded_line, "source": "raspi", "origin": "esp-plc"}, None)
+            logs.log("raspi", "out", f"forward to microtom: {forwarded_line}")
 
         resp = f"ACK_{pkey}={value}"
         logs.log("esp-plc", "out", f"raspi->esp: {resp}")

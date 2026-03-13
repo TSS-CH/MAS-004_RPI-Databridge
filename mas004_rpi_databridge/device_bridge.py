@@ -31,28 +31,33 @@ class DeviceBridge:
         self._zbc_bridge = ZbcBridgeClient(cfg.vj6530_host, cfg.vj6530_port, timeout_s=cfg.http_timeout_s)
         self._ultimate = UltimateClient(cfg.vj3350_host, cfg.vj3350_port, timeout_s=cfg.http_timeout_s)
 
-    def execute(self, device: str, pkey: str, ptype: str, op: str, value: str) -> str:
+    def execute(self, device: str, pkey: str, ptype: str, op: str, value: str, actor: str = "microtom") -> str:
         ptype = (ptype or "").upper()
         op = (op or "").lower()
 
         if ptype in READONLY_TYPES and op == "write":
             return f"{pkey}=NAK_ReadOnly"
 
+        if op == "read":
+            ok, msg = self.params.validate_read(pkey, actor=actor)
+            if not ok:
+                return f"{pkey}={msg}"
+
         if device == "raspi" or self._is_simulation(device):
-            return self._simulate(pkey, op, value)
+            return self._simulate(pkey, op, value, actor=actor)
 
         if op == "write":
-            ok, msg = self.params.validate_write(pkey, value)
+            ok, msg = self.params.validate_write(pkey, value, actor=actor)
             if not ok:
                 return f"{pkey}={msg}"
 
         try:
             if device == "esp-plc":
-                return self._esp_live(pkey, op, value)
+                return self._esp_live(pkey, op, value, actor=actor)
             if device == "vj6530":
-                return self._zbc_live(pkey, op, value)
+                return self._zbc_live(pkey, op, value, actor=actor)
             if device == "vj3350":
-                return self._ultimate_live(pkey, op, value)
+                return self._ultimate_live(pkey, op, value, actor=actor)
             return f"{pkey}=NAK_UnknownDevice"
         except Exception as exc:
             self.logs.log(device, "error", f"live communication failed for {pkey}: {repr(exc)}")
@@ -67,19 +72,19 @@ class DeviceBridge:
             return bool(self.cfg.vj3350_simulation)
         return True
 
-    def _simulate(self, pkey: str, op: str, value: str) -> str:
+    def _simulate(self, pkey: str, op: str, value: str, actor: str = "microtom") -> str:
         if op == "read":
             meta = self.params.get_meta(pkey)
             if not meta:
                 return f"{pkey}=NAK_UnknownParam"
             return f"{pkey}={self.params.get_effective_value(pkey)}"
 
-        ok, err = self.params.set_value(pkey, value)
+        ok, err = self.params.set_value(pkey, value, actor=actor)
         if ok:
             return f"ACK_{pkey}={value}"
         return f"{pkey}={err}"
 
-    def _esp_live(self, pkey: str, op: str, value: str) -> str:
+    def _esp_live(self, pkey: str, op: str, value: str, actor: str = "microtom") -> str:
         if not self._esp_watchdog.check():
             return f"{pkey}=NAK_DeviceDown"
 
@@ -111,12 +116,12 @@ class DeviceBridge:
         # write
         if response and "NAK" in response.upper():
             return f"{pkey}=NAK_DeviceRejected"
-        ok, msg = self.params.set_value(pkey, value)
+        ok, msg = self.params.set_value(pkey, value, actor=actor)
         if not ok:
             return f"{pkey}={msg}"
         return f"ACK_{pkey}={value}"
 
-    def _zbc_live(self, pkey: str, op: str, value: str) -> str:
+    def _zbc_live(self, pkey: str, op: str, value: str, actor: str = "microtom") -> str:
         mapping = self.params.get_device_map(pkey)
         zbc_mapping = (mapping.get("zbc_mapping") or "").strip()
         if zbc_mapping:
@@ -177,7 +182,7 @@ class DeviceBridge:
             return f"{pkey}={msg}"
         return f"{pkey}={decoded}"
 
-    def _ultimate_live(self, pkey: str, op: str, value: str) -> str:
+    def _ultimate_live(self, pkey: str, op: str, value: str, actor: str = "microtom") -> str:
         mapping = self.params.get_device_map(pkey)
         var_name = (mapping.get("ultimate_var_name") or pkey).strip()
         set_cmd = (mapping.get("ultimate_set_cmd") or "SetVars").strip()
@@ -187,7 +192,7 @@ class DeviceBridge:
             ack, code, _args = self._ultimate.command(set_cmd, [var_name, str(value)])
             if not ack:
                 return f"{pkey}=NAK_Ultimate_{code or 'FAIL'}"
-            ok, msg = self.params.set_value(pkey, value)
+            ok, msg = self.params.set_value(pkey, value, actor=actor)
             if not ok:
                 return f"{pkey}={msg}"
             return f"ACK_{pkey}={value}"
@@ -204,6 +209,26 @@ class DeviceBridge:
         if not ok:
             return f"{pkey}={msg}"
         return f"{pkey}={parsed}"
+
+    def mirror_to_esp(self, pkey: str, value: str) -> tuple[bool, str]:
+        if self._is_simulation("esp-plc"):
+            return False, "esp-simulation"
+        if not (self.cfg.esp_host or "").strip() or int(self.cfg.esp_port or 0) <= 0:
+            return False, "esp-endpoint-missing"
+        if not self.params.can_actor_read(pkey, actor="esp32"):
+            return False, "esp-no-access"
+        mapping = self.params.get_device_map(pkey)
+        esp_key = (mapping.get("esp_key") or pkey).strip()
+        line = f"{esp_key}={value}"
+        try:
+            response = self._esp.exchange_line(line, read_timeout_s=self.cfg.http_timeout_s)
+        except Exception as exc:
+            return False, repr(exc)
+        self.logs.log("esp-plc", "out", f"raspi->esp-plc: {line}")
+        self.logs.log("esp-plc", "in", f"esp-plc->raspi: {response}")
+        if response and "NAK" in response.upper():
+            return False, response
+        return True, response
 
 
 def _extract_rhs(line: str) -> Optional[str]:

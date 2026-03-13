@@ -17,6 +17,7 @@ from mas004_rpi_databridge.webui import build_app
 from mas004_rpi_databridge.ntp_sync import ntp_loop
 from mas004_rpi_databridge.esp_push_listener import EspPushListenerManager
 from mas004_rpi_databridge.tcp_forwarder import TcpForwarderManager
+from mas004_rpi_databridge.vj6530_async_listener import Vj6530AsyncListener
 from mas004_rpi_databridge.vj6530_poller import Vj6530Poller
 
 def backoff_s(retry_count: int, base: float, cap: float) -> float:
@@ -159,6 +160,30 @@ def vj6530_poll_loop(cfg_path: str):
         time.sleep(interval_s)
 
 
+def vj6530_async_loop(cfg_path: str):
+    while True:
+        cfg = Settings.load(cfg_path)
+        if (
+            not bool(getattr(cfg, "vj6530_async_enabled", True))
+            or bool(cfg.vj6530_simulation)
+            or not (cfg.vj6530_host or "").strip()
+            or int(cfg.vj6530_port or 0) <= 0
+        ):
+            time.sleep(1.0)
+            continue
+
+        try:
+            db = DB(cfg.db_path)
+            params = ParamStore(db)
+            logs = LogStore(db)
+            outbox = Outbox(db)
+            listener = Vj6530AsyncListener(cfg, params, logs, outbox)
+            listener.run_session(session_s=30.0)
+        except Exception as e:
+            print(f"[VJ6530-ASYNC] error: {repr(e)}", flush=True)
+            time.sleep(2.0)
+
+
 def main():
     cfg_path = DEFAULT_CFG_PATH
     cfg = Settings.load(cfg_path)
@@ -189,6 +214,8 @@ def main():
 
     vj6530_poll_t = threading.Thread(target=vj6530_poll_loop, args=(cfg_path,), daemon=True)
     vj6530_poll_t.start()
+    vj6530_async_t = threading.Thread(target=vj6530_async_loop, args=(cfg_path,), daemon=True)
+    vj6530_async_t.start()
 
     app = build_app(cfg_path)
     app.state.tcp_forwarder_manager = fwd_mgr

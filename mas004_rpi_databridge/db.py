@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS params (
   default_v TEXT,
   unit TEXT,
   rw TEXT,                        -- R / W / R/W
+  esp_rw TEXT,                    -- R / W / N from ESP32 perspective
   dtype TEXT,
   name TEXT,
   format_relevant TEXT,
@@ -132,6 +133,9 @@ def now_ts() -> float:
 
 
 def _apply_migrations(conn: sqlite3.Connection):
+    param_cols = {row[1] for row in conn.execute("PRAGMA table_info(params)").fetchall()}
+    if "esp_rw" not in param_cols:
+        conn.execute("ALTER TABLE params ADD COLUMN esp_rw TEXT")
     cols = {row[1] for row in conn.execute("PRAGMA table_info(param_device_map)").fetchall()}
     if "zbc_mapping" not in cols:
         conn.execute("ALTER TABLE param_device_map ADD COLUMN zbc_mapping TEXT")

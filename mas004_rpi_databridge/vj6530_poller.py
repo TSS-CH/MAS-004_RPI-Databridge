@@ -4,6 +4,7 @@ from typing import Callable
 
 from mas004_rpi_databridge._vj6530_bridge import ZbcBridgeClient
 from mas004_rpi_databridge.config import Settings
+from mas004_rpi_databridge.device_bridge import DeviceBridge
 from mas004_rpi_databridge.logstore import LogStore
 from mas004_rpi_databridge.outbox import Outbox
 from mas004_rpi_databridge.params import ParamStore
@@ -45,10 +46,12 @@ class Vj6530Poller:
 
         client = self.client_factory(self.cfg.vj6530_host, self.cfg.vj6530_port, timeout_s=self.cfg.http_timeout_s)
         resolved = client.read_mapped_values(mapping_by_key)
+        device_bridge = None
 
         targets = peer_urls(self.cfg, "/api/inbox")
         changed = 0
         forwarded = 0
+        esp_mirroring_available = bool(str(getattr(self.cfg, "esp_host", "") or "").strip()) and int(getattr(self.cfg, "esp_port", 0) or 0) > 0
 
         for pkey, new_value in resolved.items():
             if new_value is None:
@@ -74,6 +77,15 @@ class Vj6530Poller:
                 self.logs.log("raspi", "out", f"forward to microtom: {line}")
             else:
                 self.logs.log("raspi", "error", f"no peer_base_url configured; cannot forward VJ6530 poll {line}")
+
+            if esp_mirroring_available and self.params.can_actor_read(pkey, actor="esp32"):
+                if device_bridge is None:
+                    device_bridge = DeviceBridge(self.cfg, self.params, self.logs)
+                ok, detail = device_bridge.mirror_to_esp(pkey, new_text)
+                if ok:
+                    self.logs.log("raspi", "out", f"forward to esp-plc: {line}")
+                else:
+                    self.logs.log("raspi", "info", f"skip esp mirror for {pkey}: {detail}")
 
             changed += 1
 

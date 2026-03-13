@@ -26,6 +26,7 @@ class ParamImportZbcMappingTests(unittest.TestCase):
                     "Default Value:",
                     "Einheit:",
                     "R/W:",
+                    "ESP32 R/W:",
                     "Data Type:",
                     "Name:",
                     "ZBC Mapping:",
@@ -40,6 +41,7 @@ class ParamImportZbcMappingTests(unittest.TestCase):
                     0,
                     "ms",
                     "R/W",
+                    "R",
                     "unsigned int.",
                     "JobUpdateReplyDelay",
                     "FRQ[CURRENT_PARAMETERS]/System/TCPIP/JobUpdateReplyDelay",
@@ -56,6 +58,7 @@ class ParamImportZbcMappingTests(unittest.TestCase):
                 "FRQ[CURRENT_PARAMETERS]/System/TCPIP/JobUpdateReplyDelay",
                 mapping.get("zbc_mapping"),
             )
+            self.assertEqual("R", store.get_meta("TTP00071").get("esp_rw"))
 
 
 if __name__ == "__main__":
