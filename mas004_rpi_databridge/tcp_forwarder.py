@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import select
 import socket
 import threading
 from dataclasses import dataclass
@@ -46,6 +45,26 @@ class ForwardRule:
     listen_port: int
     target_ip: str
     target_port: int
+    primary: bool = True
+
+
+def _normalize_port(raw: int | str | None, fallback: int) -> int:
+    try:
+        port = int(raw or 0)
+    except Exception:
+        port = 0
+    return port if 1 <= port <= 65535 else fallback
+
+
+def _configure_socket(sock: socket.socket):
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 256 * 1024)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 256 * 1024)
+    try:
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    except Exception:
+        pass
+    sock.settimeout(1.0)
 
 
 def build_rules(cfg: Settings, log: Callable[[str], None]) -> List[ForwardRule]:
@@ -55,9 +74,24 @@ def build_rules(cfg: Settings, log: Callable[[str], None]) -> List[ForwardRule]:
         listen_ip = "0.0.0.0"
 
     device_defs = [
-        ("VJ6530", (cfg.vj6530_host or "").strip(), 3007, getattr(cfg, "vj6530_forward_ports", "")),
-        ("VJ3350", (cfg.vj3350_host or "").strip(), 3008, getattr(cfg, "vj3350_forward_ports", "")),
-        ("ESP32", (cfg.esp_host or "").strip(), 3009, getattr(cfg, "esp_forward_ports", "")),
+        (
+            "VJ6530",
+            (cfg.vj6530_host or "").strip(),
+            _normalize_port(getattr(cfg, "vj6530_port", 0), 3007),
+            getattr(cfg, "vj6530_forward_ports", ""),
+        ),
+        (
+            "VJ3350",
+            (cfg.vj3350_host or "").strip(),
+            _normalize_port(getattr(cfg, "vj3350_port", 0), 3008),
+            getattr(cfg, "vj3350_forward_ports", ""),
+        ),
+        (
+            "ESP32",
+            (cfg.esp_host or "").strip(),
+            _normalize_port(getattr(cfg, "esp_port", 0), 3010),
+            getattr(cfg, "esp_forward_ports", ""),
+        ),
     ]
 
     rules: List[ForwardRule] = []
@@ -85,6 +119,7 @@ def build_rules(cfg: Settings, log: Callable[[str], None]) -> List[ForwardRule]:
                     listen_port=p,
                     target_ip=target_ip,
                     target_port=p,
+                    primary=(p == main_port),
                 )
             )
     return rules
@@ -97,13 +132,17 @@ class TcpPortForwarder:
         self._stop = threading.Event()
         self._sock: socket.socket | None = None
         self._accept_thread: threading.Thread | None = None
+        self._conn_lock = threading.Lock()
+        self._tracked_sockets: set[socket.socket] = set()
+        self._active_connections = 0
 
     def start(self) -> bool:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            _configure_socket(s)
             s.bind((self.rule.listen_ip, self.rule.listen_port))
-            s.listen(128)
+            s.listen(256)
             self._sock = s
         except Exception as e:
             self.log(
@@ -127,6 +166,13 @@ class TcpPortForwarder:
                 self._sock.close()
         except Exception:
             pass
+        with self._conn_lock:
+            for sock in list(self._tracked_sockets):
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+            self._tracked_sockets.clear()
 
     def _accept_loop(self):
         assert self._sock is not None
@@ -137,17 +183,20 @@ class TcpPortForwarder:
                 break
             except Exception:
                 continue
+            _configure_socket(client)
             t = threading.Thread(target=self._handle_client, args=(client, addr), daemon=True)
             t.start()
 
     def _handle_client(self, client: socket.socket, addr):
         upstream = None
+        conn_id = f"{addr[0]}:{addr[1]}"
         try:
-            upstream = socket.create_connection((self.rule.target_ip, self.rule.target_port), timeout=3.0)
+            upstream = socket.create_connection((self.rule.target_ip, self.rule.target_port), timeout=1.5)
+            _configure_socket(upstream)
         except Exception as e:
             self.log(
                 f"[FWD] connect fail {self.rule.listen_port} -> {self.rule.target_ip}:{self.rule.target_port} "
-                f"from {addr[0]}:{addr[1]} err={repr(e)}"
+                f"from {conn_id} err={repr(e)}"
             )
             try:
                 client.close()
@@ -155,32 +204,88 @@ class TcpPortForwarder:
                 pass
             return
 
+        stop_evt = threading.Event()
         try:
-            client.setblocking(False)
-            upstream.setblocking(False)
-            sockets = [client, upstream]
-            while True:
-                readable, _, _ = select.select(sockets, [], [], 1.0)
-                if not readable:
-                    continue
-                for src in readable:
-                    dst = upstream if src is client else client
-                    try:
-                        data = src.recv(65536)
-                    except BlockingIOError:
-                        continue
-                    if not data:
-                        return
-                    dst.sendall(data)
-        except Exception:
-            return
+            active = self._track_socket_pair(client, upstream, delta=1)
+            self.log(
+                f"[FWD] open {self.rule.label} {conn_id} "
+                f"{self.rule.listen_port}->{self.rule.target_ip}:{self.rule.target_port} active={active}"
+            )
+
+            pumps = [
+                threading.Thread(target=self._pump, args=(client, upstream, stop_evt), daemon=True),
+                threading.Thread(target=self._pump, args=(upstream, client, stop_evt), daemon=True),
+            ]
+            for pump in pumps:
+                pump.start()
+
+            while not self._stop.is_set() and not stop_evt.is_set():
+                for pump in pumps:
+                    pump.join(0.2)
+                if not any(pump.is_alive() for pump in pumps):
+                    break
+            stop_evt.set()
+        except Exception as e:
+            self.log(f"[FWD] bridge fail {self.rule.label} {conn_id} err={repr(e)}")
         finally:
-            for s in (client, upstream):
+            self._close_socket(client)
+            self._close_socket(upstream)
+            active = self._track_socket_pair(client, upstream, delta=-1)
+            self.log(f"[FWD] close {self.rule.label} {conn_id} active={active}")
+
+    def _pump(self, src: socket.socket, dst: socket.socket, stop_evt: threading.Event):
+        while not self._stop.is_set() and not stop_evt.is_set():
+            try:
+                data = src.recv(65536)
+            except socket.timeout:
+                continue
+            except Exception:
+                stop_evt.set()
+                break
+
+            if not data:
+                stop_evt.set()
+                break
+
+            view = memoryview(data)
+            while view and not self._stop.is_set() and not stop_evt.is_set():
                 try:
-                    if s:
-                        s.close()
+                    sent = dst.send(view)
+                except socket.timeout:
+                    continue
                 except Exception:
-                    pass
+                    stop_evt.set()
+                    break
+                if sent <= 0:
+                    stop_evt.set()
+                    break
+                view = view[sent:]
+
+        try:
+            dst.shutdown(socket.SHUT_WR)
+        except Exception:
+            pass
+
+    def _track_socket_pair(self, client: socket.socket | None, upstream: socket.socket | None, delta: int) -> int:
+        with self._conn_lock:
+            for sock in (client, upstream):
+                if not sock:
+                    continue
+                if delta > 0:
+                    self._tracked_sockets.add(sock)
+                else:
+                    self._tracked_sockets.discard(sock)
+            self._active_connections = max(0, self._active_connections + delta)
+            return self._active_connections
+
+    @staticmethod
+    def _close_socket(sock: socket.socket | None):
+        if not sock:
+            return
+        try:
+            sock.close()
+        except Exception:
+            pass
 
 
 class TcpForwarderManager:

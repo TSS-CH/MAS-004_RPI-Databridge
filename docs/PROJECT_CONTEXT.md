@@ -22,8 +22,9 @@
 - Optional parallel outbound callback target: `<peer_base_url_secondary>/api/inbox`
 - Health endpoint: `GET /health`
 - TCP relay endpoints on Raspi eth0:
-  - fixed ports: `3007` (VJ6530), `3008` (VJ3350), `3009` (ESP32)
+  - main relay ports follow the configured device ports: `vj6530_port`, `vj3350_port`, `esp_port`
   - optional extra per-device ports from Settings UI (`*_forward_ports`)
+  - current TEST setup uses `esp_port = 3010`
 
 ## Deployment Topology
 - TEST Raspberry:
@@ -65,7 +66,7 @@
   - `scripts/mas004_multirepo_sync.ps1 -Target live -AllowLive -RestartServices`
 
 ## Last Reviewed
-- Date: 2026-03-04
+- Date: 2026-03-13
 - Local HEAD baseline during creation: `af82b02`
 
 ## Current Sync Snapshot (2026-03-04)

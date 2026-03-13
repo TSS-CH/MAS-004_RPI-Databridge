@@ -1,5 +1,17 @@
 ﻿# SUPPORT_CHANGELOG - MAS-004_RPI-Databridge
 
+## 2026-03-13 (Configurable Forwarding Ports + ESP Port 3010)
+- TCP forwarding no longer hardcodes device main ports.
+  - listeners now follow the configured device ports: `esp_port`, `vj3350_port`, `vj6530_port`
+  - this fixes the mismatch where the UI showed `ESP = 3010` but the runtime still listened on `3009`
+- Hardened `mas004_rpi_databridge/tcp_forwarder.py` for parallel traffic:
+  - shorter upstream connect timeout
+  - larger socket buffers
+  - `TCP_NODELAY` / keepalive
+  - bidirectional pump threads per connection instead of one shared select/send loop
+  - active connection tracking and cleaner shutdown on reconcile/restart
+- Updated Settings UI text to describe configured main ports plus extra routed ports.
+
 ## 2026-03-04
 - Added persistent support context files:
   - `docs/PROJECT_CONTEXT.md`
@@ -57,7 +69,7 @@
   - runtime worker: `mas004_rpi_databridge/ntp_sync.py`
   - Settings UI fields and config API mapping updated.
 - Added TCP relay service from Raspi `eth0` to device hosts on `eth1`:
-  - fixed relay ports: `3007` (VJ6530), `3008` (VJ3350), `3009` (ESP32)
+  - initial relay ports: `3007` (VJ6530), `3008` (VJ3350), `3009` (ESP32)
   - optional extra relay ports per device: `esp_forward_ports`, `vj3350_forward_ports`, `vj6530_forward_ports`
   - runtime worker: `mas004_rpi_databridge/tcp_forwarder.py`
   - started from `service.py` at app startup.
@@ -79,13 +91,13 @@
     - service restart
 - Verified runtime after reinstall:
   - endpoint `GET /api/ui/status/public` returns `200`
-  - forwarding listeners active (`3007`,`3008`,`3009`)
+  - forwarding listeners active for the configured device ports
   - NTP sync successful against `10.27.30.201`
 
 ## 2026-03-12 (Boot Robustness Fixes)
 - Fixed TEST/LIVE runtime behavior after reboot:
   - TCP forwarders now reconcile every 5 seconds and retry binds after `eth0` becomes available.
-  - This prevents the boot race where `mas004-rpi-databridge` started before `eth0` had carrier and listeners `3007/3008/3009` stayed down.
+  - This prevents the boot race where `mas004-rpi-databridge` started before `eth0` had carrier and forwarding listeners stayed down.
 - Improved NTP sync behavior:
   - command detection now uses explicit executable checks
   - failed sync attempts now report the real command error instead of the misleading "No supported NTP client found"

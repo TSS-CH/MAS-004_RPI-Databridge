@@ -36,7 +36,7 @@
   "shared_secret": "SET_ME_OR_EMPTY",
 
   "esp_host": "192.168.2.10",
-  "esp_port": 5000,
+  "esp_port": 3010,
   "esp_watchdog_host": "192.168.2.10",
   "esp_forward_ports": "",
   "esp_simulation": true,

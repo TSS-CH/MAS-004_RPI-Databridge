@@ -1260,11 +1260,11 @@ load();
 
   <fieldset>
     <legend>Device Endpoints (ESP / VJ3350 / VJ6530)</legend>
-    <div class="muted">TCP Forwarding: Ports 3007 (VJ6530), 3008 (VJ3350), 3009 (ESP32) werden auf die jeweilige eth1 Ziel-IP 1:1 weitergeleitet. Zusaetzliche Ports hier als Liste (Komma/Semikolon/Leerzeichen) eintragen.</div>
+    <div class="muted">TCP Forwarding: Die hier eingestellten Geraeteports werden auf die jeweilige eth1 Ziel-IP 1:1 weitergeleitet. Zusaetzliche Ports koennen pro Geraet als Liste (Komma/Semikolon/Leerzeichen) parallel geroutet werden.</div>
     <div class="grid cols-device">
       <div class="field"><label>ESP host</label><input id="esp_host"/></div>
       <div class="field"><label>ESP port</label><input id="esp_port"/></div>
-      <div class="field"><label>ESP extra routed ports</label><input id="esp_forward_ports" placeholder="z.B. 3010, 3011"/></div>
+      <div class="field"><label>ESP extra routed ports</label><input id="esp_forward_ports" placeholder="z.B. 3011, 3012"/></div>
       <div class="field"><label>ESP watchdog host</label><input id="esp_watchdog_host" placeholder="leer = esp_host"/></div>
       <label class="checkline"><input type="checkbox" id="esp_simulation"/>Simulation</label>
     </div>
