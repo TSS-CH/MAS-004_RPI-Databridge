@@ -158,4 +158,5 @@ def _recv_until(sock: socket.socket, marker: bytes, limit: int = 65536) -> bytes
 
 def _recv_line(sock: socket.socket, limit: int = 8192) -> str:
     data = _recv_until(sock, b"\n", limit=limit)
-    return data.decode("utf-8", errors="replace").strip()
+    first_line = data.split(b"\n", 1)[0]
+    return first_line.decode("utf-8", errors="replace").strip()

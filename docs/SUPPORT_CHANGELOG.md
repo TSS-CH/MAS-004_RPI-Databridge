@@ -11,6 +11,9 @@
   - bidirectional pump threads per connection instead of one shared select/send loop
   - active connection tracking and cleaner shutdown on reconcile/restart
 - Updated Settings UI text to describe configured main ports plus extra routed ports.
+- Fixed ESP line-response parsing in `mas004_rpi_databridge/device_clients.py`:
+  - only the first received line is now treated as the response payload
+  - prevents heartbeat or extra trailing lines from corrupting `MAP`/`MAS` reads
 
 ## 2026-03-04
 - Added persistent support context files:
