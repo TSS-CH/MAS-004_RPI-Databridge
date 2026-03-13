@@ -56,7 +56,7 @@ def _normalize_port(raw: int | str | None, fallback: int) -> int:
     return port if 1 <= port <= 65535 else fallback
 
 
-def _configure_socket(sock: socket.socket):
+def _configure_socket(sock: socket.socket, *, set_timeout: bool = True):
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 256 * 1024)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 256 * 1024)
@@ -64,7 +64,8 @@ def _configure_socket(sock: socket.socket):
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
     except Exception:
         pass
-    sock.settimeout(1.0)
+    if set_timeout:
+        sock.settimeout(1.0)
 
 
 def build_rules(cfg: Settings, log: Callable[[str], None]) -> List[ForwardRule]:
@@ -140,7 +141,7 @@ class TcpPortForwarder:
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            _configure_socket(s)
+            _configure_socket(s, set_timeout=False)
             s.bind((self.rule.listen_ip, self.rule.listen_port))
             s.listen(256)
             self._sock = s

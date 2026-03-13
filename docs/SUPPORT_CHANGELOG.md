@@ -14,6 +14,9 @@
 - Fixed ESP line-response parsing in `mas004_rpi_databridge/device_clients.py`:
   - only the first received line is now treated as the response payload
   - prevents heartbeat or extra trailing lines from corrupting `MAP`/`MAS` reads
+- Fixed a forwarding regression in `mas004_rpi_databridge/tcp_forwarder.py`:
+  - listener sockets no longer get a read timeout
+  - this keeps the accept loop alive and fixes hanging routed ports such as `10.27.67.69:3010`
 
 ## 2026-03-04
 - Added persistent support context files:
