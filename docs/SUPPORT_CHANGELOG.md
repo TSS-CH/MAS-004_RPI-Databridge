@@ -1,4 +1,13 @@
-﻿# SUPPORT_CHANGELOG - MAS-004_RPI-Databridge
+# SUPPORT_CHANGELOG - MAS-004_RPI-Databridge
+
+## 2026-03-13 (6530 Polling + Startup Crash Fix)
+- Added `mas004_rpi_databridge/vj6530_poller.py`.
+- The Raspi now polls all workbook-mapped `TTE` / `TTW` states from the real 6530 by reusing one summary read per cycle.
+- Only changed fault/warning states are persisted locally and forwarded to Microtom.
+- Added `vj6530_poll_interval_s` to config, defaults and Settings UI.
+- Fixed an installed-package startup regression:
+  - `_vj6530_bridge.py` now discovers sibling repos robustly even when the main package runs from `site-packages`
+  - this fixes the crash that caused `https://10.27.67.69:8080/api/inbox` to refuse connections
 
 ## 2026-03-13 (ZBC Library Integration)
 - Added `MAS-004_ZBC-Library` as a new managed subproject.
@@ -158,4 +167,5 @@
   - deployment flow
   - API contracts
   - multi-repo sync behavior
+
 

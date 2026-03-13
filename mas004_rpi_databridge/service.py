@@ -17,6 +17,7 @@ from mas004_rpi_databridge.webui import build_app
 from mas004_rpi_databridge.ntp_sync import ntp_loop
 from mas004_rpi_databridge.esp_push_listener import EspPushListenerManager
 from mas004_rpi_databridge.tcp_forwarder import TcpForwarderManager
+from mas004_rpi_databridge.vj6530_poller import Vj6530Poller
 
 def backoff_s(retry_count: int, base: float, cap: float) -> float:
     n = min(retry_count, 10)
@@ -128,6 +129,36 @@ def esp_push_listener_loop(cfg_path: str, push_mgr: EspPushListenerManager):
         time.sleep(5.0)
 
 
+def vj6530_poll_loop(cfg_path: str):
+    while True:
+        cfg = Settings.load(cfg_path)
+        interval_s = max(0.5, float(getattr(cfg, "vj6530_poll_interval_s", 2.0) or 2.0))
+
+        if bool(cfg.vj6530_simulation) or not (cfg.vj6530_host or "").strip() or int(cfg.vj6530_port or 0) <= 0:
+            time.sleep(interval_s)
+            continue
+
+        try:
+            db = DB(cfg.db_path)
+            params = ParamStore(db)
+            logs = LogStore(db)
+            outbox = Outbox(db)
+            poller = Vj6530Poller(cfg, params, logs, outbox)
+            result = poller.poll_once()
+            if result.get("changed"):
+                print(
+                    f"[VJ6530-POLL] checked={result.get('checked', 0)} changed={result.get('changed', 0)} "
+                    f"forwarded={result.get('forwarded', 0)}",
+                    flush=True,
+                )
+        except Exception as e:
+            print(f"[VJ6530-POLL] error: {repr(e)}", flush=True)
+            time.sleep(min(interval_s, 2.0))
+            continue
+
+        time.sleep(interval_s)
+
+
 def main():
     cfg_path = DEFAULT_CFG_PATH
     cfg = Settings.load(cfg_path)
@@ -155,6 +186,9 @@ def main():
         print(f"[ESP-PUSH] manager error: {repr(e)}", flush=True)
     push_t = threading.Thread(target=esp_push_listener_loop, args=(cfg_path, push_mgr), daemon=True)
     push_t.start()
+
+    vj6530_poll_t = threading.Thread(target=vj6530_poll_loop, args=(cfg_path,), daemon=True)
+    vj6530_poll_t.start()
 
     app = build_app(cfg_path)
     app.state.tcp_forwarder_manager = fwd_mgr

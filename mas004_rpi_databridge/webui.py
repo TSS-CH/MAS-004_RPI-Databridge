@@ -64,6 +64,7 @@ class ConfigUpdate(BaseModel):
     vj6530_port: Optional[int] = None
     vj6530_simulation: Optional[bool] = None
     vj6530_forward_ports: Optional[str] = None
+    vj6530_poll_interval_s: Optional[float] = None
     esp_forward_ports: Optional[str] = None
 
     # daily logfile retention
@@ -397,6 +398,7 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
                     "port": cfg2.vj6530_port,
                     "simulation": cfg2.vj6530_simulation,
                     "forward_ports": getattr(cfg2, "vj6530_forward_ports", ""),
+                    "poll_interval_s": getattr(cfg2, "vj6530_poll_interval_s", 2.0),
                 },
             }
         }
@@ -428,6 +430,12 @@ def build_app(cfg_path: str = DEFAULT_CFG_PATH) -> FastAPI:
         except Exception:
             cfg2.ntp_sync_interval_min = 60
         cfg2.ntp_sync_interval_min = max(1, min(24 * 60, cfg2.ntp_sync_interval_min))
+
+        try:
+            cfg2.vj6530_poll_interval_s = float(getattr(cfg2, "vj6530_poll_interval_s", 2.0) or 2.0)
+        except Exception:
+            cfg2.vj6530_poll_interval_s = 2.0
+        cfg2.vj6530_poll_interval_s = max(0.5, min(300.0, cfg2.vj6530_poll_interval_s))
 
         for k in ("esp_forward_ports", "vj3350_forward_ports", "vj6530_forward_ports"):
             v = getattr(cfg2, k, "")
@@ -1279,7 +1287,7 @@ load();
       <div class="field"><label>VJ6530 host</label><input id="vj6530_host"/></div>
       <div class="field"><label>VJ6530 port</label><input id="vj6530_port"/></div>
       <div class="field"><label>VJ6530 extra routed ports</label><input id="vj6530_forward_ports" placeholder="z.B. 3030, 3031"/></div>
-      <div class="field empty"><label>&nbsp;</label><input disabled/></div>
+      <div class="field"><label>VJ6530 poll interval (s)</label><input id="vj6530_poll_interval_s" type="number" min="0.5" max="300" step="0.5"/></div>
       <label class="checkline"><input type="checkbox" id="vj6530_simulation"/>Simulation</label>
     </div>
     <div class="actions">
@@ -1464,6 +1472,7 @@ async function reloadAll(){
   document.getElementById("vj6530_host").value = c.vj6530_host || "";
   document.getElementById("vj6530_port").value = c.vj6530_port ?? "";
   document.getElementById("vj6530_forward_ports").value = c.vj6530_forward_ports || "";
+  document.getElementById("vj6530_poll_interval_s").value = c.vj6530_poll_interval_s ?? 2.0;
   document.getElementById("vj6530_simulation").checked = !!c.vj6530_simulation;
   document.getElementById("logs_keep_days_all").value = c.logs_keep_days_all ?? 30;
   document.getElementById("logs_keep_days_esp").value = c.logs_keep_days_esp ?? 30;
@@ -1571,6 +1580,7 @@ async function saveDevices(){
     vj6530_host: document.getElementById("vj6530_host").value.trim(),
     vj6530_port: Number(document.getElementById("vj6530_port").value.trim()),
     vj6530_forward_ports: document.getElementById("vj6530_forward_ports").value.trim(),
+    vj6530_poll_interval_s: Number(document.getElementById("vj6530_poll_interval_s").value.trim()),
     vj6530_simulation: document.getElementById("vj6530_simulation").checked
   };
   await api("/api/config", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)});

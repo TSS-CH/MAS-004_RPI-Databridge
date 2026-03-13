@@ -66,6 +66,7 @@ class Settings:
     vj6530_port: int = 0
     vj6530_simulation: bool = True
     vj6530_forward_ports: str = ""
+    vj6530_poll_interval_s: float = 2.0
     esp_forward_ports: str = ""
 
     # Daily log-file retention (days)

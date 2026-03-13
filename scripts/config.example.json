@@ -50,6 +50,7 @@
   "vj6530_port": 3002,
   "vj6530_forward_ports": "",
   "vj6530_simulation": false,
+  "vj6530_poll_interval_s": 2.0,
 
   "logs_keep_days_all": 30,
   "logs_keep_days_esp": 30,
