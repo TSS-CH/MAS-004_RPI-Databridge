@@ -106,6 +106,7 @@ class ParamStore:
 
         # Optional mapping columns for live device protocols.
         c_esp_key = col_any("ESP Key", "ESP_Key", "ESP Param", "ESP Parameter")
+        c_zbc_mapping = col_any("ZBC Mapping", "ZBC Mapping:")
         c_zbc_msg_id = col_any("VJ6530 Msg ID", "VJ6530 Message ID", "ZBC Message ID", "ZBC Msg ID")
         c_zbc_cmd_id = col_any("VJ6530 Cmd ID", "VJ6530 Command ID", "ZBC Command ID", "ZBC Cmd ID")
         c_zbc_codec = col_any("VJ6530 Codec", "ZBC Codec", "ZBC Value Codec")
@@ -119,6 +120,7 @@ class ParamStore:
             c is not None
             for c in (
                 c_esp_key,
+                c_zbc_mapping,
                 c_zbc_msg_id,
                 c_zbc_cmd_id,
                 c_zbc_codec,
@@ -189,6 +191,7 @@ class ParamStore:
                 if has_map_cols:
                     map_row = {
                         "esp_key": _to_clean_str(ws.cell(r, c_esp_key).value) if c_esp_key else None,
+                        "zbc_mapping": _to_clean_str(ws.cell(r, c_zbc_mapping).value) if c_zbc_mapping else None,
                         "zbc_message_id": _to_int(ws.cell(r, c_zbc_msg_id).value) if c_zbc_msg_id else None,
                         "zbc_command_id": _to_int(ws.cell(r, c_zbc_cmd_id).value) if c_zbc_cmd_id else None,
                         "zbc_value_codec": _to_clean_str(ws.cell(r, c_zbc_codec).value) if c_zbc_codec else None,
@@ -203,13 +206,14 @@ class ParamStore:
                     if has_any_map:
                         c.execute(
                             """INSERT INTO param_device_map(
-                               pkey, esp_key, zbc_message_id, zbc_command_id, zbc_value_codec,
+                               pkey, esp_key, zbc_mapping, zbc_message_id, zbc_command_id, zbc_value_codec,
                                zbc_scale, zbc_offset, ultimate_set_cmd, ultimate_get_cmd,
                                ultimate_var_name, updated_ts
                                )
-                               VALUES(?,?,?,?,?,?,?,?,?,?,?)
+                               VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
                                ON CONFLICT(pkey) DO UPDATE SET
                                  esp_key=excluded.esp_key,
+                                 zbc_mapping=excluded.zbc_mapping,
                                  zbc_message_id=excluded.zbc_message_id,
                                  zbc_command_id=excluded.zbc_command_id,
                                  zbc_value_codec=excluded.zbc_value_codec,
@@ -222,6 +226,7 @@ class ParamStore:
                             (
                                 pkey,
                                 map_row["esp_key"],
+                                map_row["zbc_mapping"],
                                 map_row["zbc_message_id"],
                                 map_row["zbc_command_id"],
                                 map_row["zbc_value_codec"],
@@ -253,7 +258,7 @@ class ParamStore:
     def get_device_map(self, pkey: str) -> Dict[str, Any]:
         with self.db._conn() as c:
             row = c.execute(
-                """SELECT esp_key,zbc_message_id,zbc_command_id,zbc_value_codec,zbc_scale,zbc_offset,
+                """SELECT esp_key,zbc_mapping,zbc_message_id,zbc_command_id,zbc_value_codec,zbc_scale,zbc_offset,
                           ultimate_set_cmd,ultimate_get_cmd,ultimate_var_name
                    FROM param_device_map
                    WHERE pkey=?""",
@@ -265,6 +270,7 @@ class ParamStore:
 
         keys = [
             "esp_key",
+            "zbc_mapping",
             "zbc_message_id",
             "zbc_command_id",
             "zbc_value_codec",
@@ -330,7 +336,7 @@ class ParamStore:
             )
         return True, "OK"
 
-    def apply_device_value(self, pkey: str, value: str) -> Tuple[bool, str]:
+    def apply_device_value(self, pkey: str, value: str, promote_default: bool = False) -> Tuple[bool, str]:
         """
         Speichert einen von Device-Seite gemeldeten Wert (TTO/Laser/ESP) lokal.
         Im Unterschied zu set_value() wird rw NICHT blockiert, da ReadOnly hier nur
@@ -342,7 +348,7 @@ class ParamStore:
 
         rw = (meta.get("rw") or "").strip().upper()
         ptype = (meta.get("ptype") or "").strip().upper()
-        can_update_default = rw in ("W", "R/W") or ptype in DEVICE_PUSH_PTYPES
+        can_update_default = bool(promote_default) or rw in ("W", "R/W") or ptype in DEVICE_PUSH_PTYPES
 
         ts = now_ts()
         with self.db._conn() as c:
@@ -426,7 +432,7 @@ class ParamStore:
 
         wsql = ("WHERE " + " AND ".join(where)) if where else ""
         sql = f"""SELECT p.pkey,p.ptype,p.pid,p.min_v,p.max_v,p.default_v,p.unit,p.rw,p.dtype,p.name,p.message,
-                         m.esp_key,m.zbc_message_id,m.zbc_command_id,m.zbc_value_codec,m.zbc_scale,m.zbc_offset,
+                         m.esp_key,m.zbc_mapping,m.zbc_message_id,m.zbc_command_id,m.zbc_value_codec,m.zbc_scale,m.zbc_offset,
                          m.ultimate_set_cmd,m.ultimate_get_cmd,m.ultimate_var_name
                   FROM params p
                   LEFT JOIN param_device_map m ON m.pkey = p.pkey
@@ -459,14 +465,15 @@ class ParamStore:
                     "name": r[9],
                     "message": r[10],
                     "esp_key": r[11],
-                    "zbc_message_id": r[12],
-                    "zbc_command_id": r[13],
-                    "zbc_value_codec": r[14],
-                    "zbc_scale": r[15],
-                    "zbc_offset": r[16],
-                    "ultimate_set_cmd": r[17],
-                    "ultimate_get_cmd": r[18],
-                    "ultimate_var_name": r[19],
+                    "zbc_mapping": r[12],
+                    "zbc_message_id": r[13],
+                    "zbc_command_id": r[14],
+                    "zbc_value_codec": r[15],
+                    "zbc_scale": r[16],
+                    "zbc_offset": r[17],
+                    "ultimate_set_cmd": r[18],
+                    "ultimate_get_cmd": r[19],
+                    "ultimate_var_name": r[20],
                 }
             )
         return out
@@ -492,6 +499,7 @@ class ParamStore:
             "Name",
             "Message",
             "ESP Key",
+            "ZBC Mapping",
             "VJ6530 Msg ID",
             "VJ6530 Cmd ID",
             "VJ6530 Codec",
@@ -519,6 +527,7 @@ class ParamStore:
                     r.get("name"),
                     r.get("message"),
                     r.get("esp_key"),
+                    r.get("zbc_mapping"),
                     r.get("zbc_message_id"),
                     r.get("zbc_command_id"),
                     r.get("zbc_value_codec"),

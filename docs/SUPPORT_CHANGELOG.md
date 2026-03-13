@@ -7,6 +7,16 @@
 - `MAS-004_VJ6530-ZBC-Bridge` has been switched to consume the shared ZBC library.
 - Live writeback against the real 6530 is now proven through `FTX[CURRENT_PARAMETERS]`.
 
+## 2026-03-13 (TTO Mapping Routed Live Through ZBC)
+- Main-project Excel import now reads the `ZBC Mapping:` column into `param_device_map.zbc_mapping`.
+- Database schema migrates existing installations automatically by adding `zbc_mapping` if missing.
+- `DeviceBridge` now prefers workbook-based ZBC mappings for `TTP`, `TTE`, `TTW`:
+  - `FRQ[CURRENT_PARAMETERS]/...` -> live read/write via the 6530 current-parameter archive
+  - `IRQ{LEI,ERR}/Fault[...]` -> live TTE state read
+  - `IRQ{LEI,ERR}/Warning[...]` -> live TTW state read
+- Live reads from devices now optionally promote the local default value, so the Raspi DB tracks the real device state instead of a stale spreadsheet default.
+- The workbook updater now writes current TTP values from the real printer into `Default Value:`.
+
 ## 2026-03-13 (TTO Workbook Mapping via Live CurrentParameters)
 - Extended `MAS-004_ZBC-Library` with a CLARiTY parameter-archive parser and a `request_current_parameters()` helper.
 - Verified live against the 6530 that `FRQ[CURRENT_PARAMETERS]` returns `CurrentParameters.xml`.

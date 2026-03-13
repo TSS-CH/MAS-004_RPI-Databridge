@@ -1,6 +1,7 @@
 import sqlite3
 import time
 import threading
+from contextlib import contextmanager
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS outbox (
@@ -69,6 +70,7 @@ CREATE TABLE IF NOT EXISTS param_values (
 CREATE TABLE IF NOT EXISTS param_device_map (
   pkey TEXT PRIMARY KEY,
   esp_key TEXT,
+  zbc_mapping TEXT,
   zbc_message_id INTEGER,
   zbc_command_id INTEGER,
   zbc_value_codec TEXT,
@@ -92,13 +94,17 @@ class DB:
         self.path = path
         self._init_once()
 
+    @contextmanager
     def _conn(self):
         # isolation_level=None => autocommit
         c = sqlite3.connect(self.path, timeout=30, isolation_level=None)
-        c.execute("PRAGMA busy_timeout=5000;")
-        c.execute("PRAGMA journal_mode=WAL;")
-        c.execute("PRAGMA synchronous=NORMAL;")
-        return c
+        try:
+            c.execute("PRAGMA busy_timeout=5000;")
+            c.execute("PRAGMA journal_mode=WAL;")
+            c.execute("PRAGMA synchronous=NORMAL;")
+            yield c
+        finally:
+            c.close()
 
     def _init_once(self):
         global _initialized_paths
@@ -111,6 +117,7 @@ class DB:
                 try:
                     with self._conn() as c:
                         c.executescript(SCHEMA)
+                        _apply_migrations(c)
                     _initialized_paths.add(self.path)
                     return
                 except sqlite3.OperationalError as e:
@@ -122,3 +129,9 @@ class DB:
 
 def now_ts() -> float:
     return time.time()
+
+
+def _apply_migrations(conn: sqlite3.Connection):
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(param_device_map)").fetchall()}
+    if "zbc_mapping" not in cols:
+        conn.execute("ALTER TABLE param_device_map ADD COLUMN zbc_mapping TEXT")

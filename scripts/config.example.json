@@ -46,10 +46,10 @@
   "vj3350_forward_ports": "",
   "vj3350_simulation": true,
 
-  "vj6530_host": "192.168.2.30",
-  "vj6530_port": 3007,
+  "vj6530_host": "192.168.2.103",
+  "vj6530_port": 3002,
   "vj6530_forward_ports": "",
-  "vj6530_simulation": true,
+  "vj6530_simulation": false,
 
   "logs_keep_days_all": 30,
   "logs_keep_days_esp": 30,

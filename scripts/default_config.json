@@ -30,6 +30,7 @@
   "vj3350_simulation": true,
   "vj3350_forward_ports": "",
   "vj6530_simulation": true,
+  "vj6530_port": 3002,
   "vj6530_forward_ports": "",
   "logs_keep_days_all": 30,
   "logs_keep_days_esp": 30,

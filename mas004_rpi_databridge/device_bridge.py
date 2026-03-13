@@ -6,6 +6,7 @@ import struct
 from typing import Optional
 
 from mas004_rpi_databridge.config import Settings
+from mas004_rpi_databridge._vj6530_bridge import ZbcBridgeClient
 from mas004_rpi_databridge.device_clients import DeviceWatchdog, EspPlcClient, UltimateClient, ZipherClient
 from mas004_rpi_databridge.logstore import LogStore
 from mas004_rpi_databridge.params import ParamStore
@@ -27,13 +28,14 @@ class DeviceBridge:
             down_after=cfg.watchdog_down_after,
         )
         self._zbc = ZipherClient(cfg.vj6530_host, cfg.vj6530_port, timeout_s=cfg.http_timeout_s)
+        self._zbc_bridge = ZbcBridgeClient(cfg.vj6530_host, cfg.vj6530_port, timeout_s=cfg.http_timeout_s)
         self._ultimate = UltimateClient(cfg.vj3350_host, cfg.vj3350_port, timeout_s=cfg.http_timeout_s)
 
     def execute(self, device: str, pkey: str, ptype: str, op: str, value: str) -> str:
         ptype = (ptype or "").upper()
         op = (op or "").lower()
 
-        if ptype in READONLY_TYPES:
+        if ptype in READONLY_TYPES and op == "write":
             return f"{pkey}=NAK_ReadOnly"
 
         if device == "raspi" or self._is_simulation(device):
@@ -101,7 +103,7 @@ class DeviceBridge:
             rhs = _extract_rhs(response)
             if rhs is None:
                 return f"{pkey}=NAK_DeviceBadResponse"
-            ok, msg = self.params.apply_device_value(pkey, rhs)
+            ok, msg = self.params.apply_device_value(pkey, rhs, promote_default=True)
             if not ok:
                 return f"{pkey}={msg}"
             return f"{pkey}={rhs}"
@@ -116,6 +118,26 @@ class DeviceBridge:
 
     def _zbc_live(self, pkey: str, op: str, value: str) -> str:
         mapping = self.params.get_device_map(pkey)
+        zbc_mapping = (mapping.get("zbc_mapping") or "").strip()
+        if zbc_mapping:
+            if op == "read":
+                resolved = self._zbc_bridge.read_mapped_value(zbc_mapping)
+                if resolved is None:
+                    return f"{pkey}=NAK_DeviceBadResponse"
+                ok, msg = self.params.apply_device_value(pkey, resolved, promote_default=True)
+                if not ok:
+                    return f"{pkey}={msg}"
+                return f"{pkey}={resolved}"
+
+            message_id, verified = self._zbc_bridge.write_mapped_value(zbc_mapping, value, verify_readback=True)
+            if int(message_id) != 0:
+                return f"{pkey}=NAK_ZBC_{int(message_id):04X}"
+            stored_value = verified if verified is not None else str(value)
+            ok, msg = self.params.apply_device_value(pkey, stored_value, promote_default=True)
+            if not ok:
+                return f"{pkey}={msg}"
+            return f"ACK_{pkey}={stored_value}"
+
         command_id = mapping.get("zbc_command_id")
         if command_id is None:
             return f"{pkey}=NAK_MappingMissing"
@@ -150,7 +172,7 @@ class DeviceBridge:
             return f"{pkey}=NAK_DeviceBadResponse"
 
         decoded = _decode_codec(raw, codec, scale, offset)
-        ok, msg = self.params.apply_device_value(pkey, decoded)
+        ok, msg = self.params.apply_device_value(pkey, decoded, promote_default=True)
         if not ok:
             return f"{pkey}={msg}"
         return f"{pkey}={decoded}"
@@ -178,7 +200,7 @@ class DeviceBridge:
         if parsed is None:
             return f"{pkey}=NAK_DeviceBadResponse"
 
-        ok, msg = self.params.apply_device_value(pkey, parsed)
+        ok, msg = self.params.apply_device_value(pkey, parsed, promote_default=True)
         if not ok:
             return f"{pkey}={msg}"
         return f"{pkey}={parsed}"
