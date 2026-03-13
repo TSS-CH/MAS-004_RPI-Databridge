@@ -1,5 +1,10 @@
 ﻿# SUPPORT_CHANGELOG - MAS-004_RPI-Databridge
 
+## 2026-03-13 (ZBC Library Integration)
+- Added `MAS-004_ZBC-Library` as a new managed subproject.
+- Extended multi-repo status/sync scripts to include the ZBC library.
+- Added bundle-based Pi synchronization for repos without a central Git remote.
+
 ## 2026-03-13 (Configurable Forwarding Ports + ESP Port 3010)
 - TCP forwarding no longer hardcodes device main ports.
   - listeners now follow the configured device ports: `esp_port`, `vj3350_port`, `vj6530_port`

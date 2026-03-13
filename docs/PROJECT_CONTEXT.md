@@ -4,7 +4,7 @@
 - Main project in the MAS-004 landscape.
 - Runs on Raspberry PLC and provides the central data bridge to Microtom.
 - Hosts the operator web UI and the test environment.
-- Coordinates simulated/real sub-bridges for ESP32, VJ3350, VJ6530.
+- Coordinates simulated/real sub-bridges for ESP32, VJ3350, VJ6530 and shared protocol libraries.
 
 ## Repository Scope
 - Core app package: `mas004_rpi_databridge/`
@@ -56,6 +56,7 @@
 - `MAS-004_ESP32-PLC-Bridge`: ESP32 transport/probe subproject
 - `MAS-004_VJ3350-Ultimate-Bridge`: VJ3350 transport/probe subproject
 - `MAS-004_VJ6530-ZBC-Bridge`: VJ6530 transport/probe subproject
+- `MAS-004_ZBC-Library`: shared ZBC transport/message library for the 6530 stack
 
 ## Sync/Support Policy
 - Before and after changes in this repo, run:
@@ -71,6 +72,6 @@
 - Local HEAD baseline during creation: `af82b02`
 
 ## Current Sync Snapshot (2026-03-04)
-- Local git + all 4 repos: synchronized and clean.
+- Local git + all managed repos must stay synchronized and clean.
 - Remote status depends on selected target profile (`test` or `live`) and connectivity.
 - Safety policy remains active: no destructive overwrite on dirty Pi trees.

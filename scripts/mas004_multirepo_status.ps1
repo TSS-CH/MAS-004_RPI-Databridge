@@ -20,7 +20,8 @@ $repos = @(
     @{ Name = "MAS-004_RPI-Databridge"; Local = Join-Path $gitRoot "MAS-004_RPI-Databridge"; Remote = "/opt/MAS-004_RPI-Databridge"; Service = "mas004-rpi-databridge.service"; Main = $true },
     @{ Name = "MAS-004_ESP32-PLC-Bridge"; Local = Join-Path $gitRoot "MAS-004_ESP32-PLC-Bridge"; Remote = "/opt/MAS-004_ESP32-PLC-Bridge"; Service = "mas004-esp32-plc-bridge.service"; Main = $false },
     @{ Name = "MAS-004_VJ3350-Ultimate-Bridge"; Local = Join-Path $gitRoot "MAS-004_VJ3350-Ultimate-Bridge"; Remote = "/opt/MAS-004_VJ3350-Ultimate-Bridge"; Service = "mas004-vj3350-ultimate-bridge.service"; Main = $false },
-    @{ Name = "MAS-004_VJ6530-ZBC-Bridge"; Local = Join-Path $gitRoot "MAS-004_VJ6530-ZBC-Bridge"; Remote = "/opt/MAS-004_VJ6530-ZBC-Bridge"; Service = "mas004-vj6530-zbc-bridge.service"; Main = $false }
+    @{ Name = "MAS-004_VJ6530-ZBC-Bridge"; Local = Join-Path $gitRoot "MAS-004_VJ6530-ZBC-Bridge"; Remote = "/opt/MAS-004_VJ6530-ZBC-Bridge"; Service = "mas004-vj6530-zbc-bridge.service"; Main = $false },
+    @{ Name = "MAS-004_ZBC-Library"; Local = Join-Path $gitRoot "MAS-004_ZBC-Library"; Remote = "/opt/MAS-004_ZBC-Library"; Service = ""; Main = $false }
 )
 
 function Get-MapValue([hashtable]$Map, [string]$Key, $Default) {
@@ -59,10 +60,14 @@ if [ -d '__REMOTE_PATH__' ]; then
 else
   echo EXISTS=no
 fi
-if systemctl list-unit-files '__SERVICE__' >/dev/null 2>&1; then
-  echo SERVICE=$(systemctl is-active '__SERVICE__' 2>/dev/null)
+if [ -n '__SERVICE__' ]; then
+  if systemctl list-unit-files '__SERVICE__' >/dev/null 2>&1; then
+    echo SERVICE=$(systemctl is-active '__SERVICE__' 2>/dev/null)
+  else
+    echo SERVICE=missing
+  fi
 else
-  echo SERVICE=missing
+  echo SERVICE=n/a
 fi
 '@
 

@@ -59,3 +59,4 @@
 ## 6. Ownership
 - Main project owner context: MAS-004_RPI-Databridge
 - Subprojects are operational dependencies and must be checked in each release cycle.
+- Shared protocol library also participates in the multi-repo release flow: `MAS-004_ZBC-Library`
