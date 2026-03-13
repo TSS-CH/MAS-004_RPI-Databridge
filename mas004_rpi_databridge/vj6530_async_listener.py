@@ -48,9 +48,12 @@ class Vj6530AsyncListener:
             if int(msg_id) != int(MessageId.NUL):
                 raise RuntimeError(f"6530 async subscribe failed with 0x{int(msg_id):04X}")
 
-            VJ6530_RUNTIME.mark_async_ok()
             self.logs.log("vj6530", "info", "async subscription active")
-            self._sync_from_summary(client.request_summary_info(force_refresh=True))
+            try:
+                self._sync_from_summary(client.request_summary_info(force_refresh=True))
+                VJ6530_RUNTIME.mark_async_ok()
+            except Exception as exc:
+                self.logs.log("vj6530", "info", f"async startup summary skipped: {repr(exc)}")
 
             deadline = time.monotonic() + max(5.0, float(session_s or 30.0))
             while time.monotonic() < deadline:

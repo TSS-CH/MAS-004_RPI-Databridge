@@ -141,9 +141,14 @@ class DeviceBridge:
             if op == "read":
                 if zbc_upper.startswith("STATUS[") or zbc_upper.startswith("STS[") or zbc_upper.startswith("IRQ{"):
                     return f"{pkey}={self.params.get_effective_value(pkey)}"
-                resolved = self._zbc_bridge.read_mapped_value(zbc_mapping)
+                try:
+                    resolved = self._zbc_bridge.read_mapped_value(zbc_mapping)
+                except Exception as exc:
+                    cached_value = self.params.get_effective_value(pkey)
+                    self.logs.log("vj6530", "info", f"live read fallback for {pkey}: {repr(exc)}")
+                    return f"{pkey}={cached_value}"
                 if resolved is None:
-                    return f"{pkey}=NAK_DeviceBadResponse"
+                    return f"{pkey}={self.params.get_effective_value(pkey)}"
                 ok, msg = self.params.apply_device_value(pkey, resolved, promote_default=True)
                 if not ok:
                     return f"{pkey}={msg}"

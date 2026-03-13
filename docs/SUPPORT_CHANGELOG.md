@@ -9,6 +9,7 @@
   - if async is healthy, periodic `TTE` / `TTW` polling is skipped
   - polling resumes automatically if async ages out or fails
 - `mas004_rpi_databridge/device_bridge.py` now serves `STATUS[...]` and `IRQ{...}` reads from the Raspi-cached state instead of forcing a live printer roundtrip for every Microtom read.
+- `FRQ[CURRENT_PARAMETERS]` reads now fall back to the Raspi-cached TTO value if the live 6530 archive read stalls or times out.
 - Added background 6530 cache warmup at router startup so the first `TTP` access after a restart is usually already primed.
 - Added a repo-tracked master workbook copy:
   - `master_data/Parameterliste SAR41-MAS-004_V11.11.25.xlsx`

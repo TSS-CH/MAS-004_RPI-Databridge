@@ -27,6 +27,11 @@ class FakeZbcBridgeClient:
         return 0, str(value)
 
 
+class FailingZbcBridgeClient(FakeZbcBridgeClient):
+    def read_mapped_value(self, mapping: str):
+        raise TimeoutError("timed out")
+
+
 class DeviceBridgeTtoMappingTests(unittest.TestCase):
     def test_zbc_mapping_read_and_write_use_bridge_client(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -187,6 +192,86 @@ class DeviceBridgeTtoMappingTests(unittest.TestCase):
 
             self.assertEqual("TTP00073=1", read_resp)
             self.assertEqual([], fake.read_calls)
+
+    def test_current_parameter_read_falls_back_to_cached_value(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db = DB(str(Path(tmpdir) / "db.sqlite3"))
+            params = ParamStore(db)
+            logs = LogStore(db)
+
+            with db._conn() as c:
+                c.execute(
+                    """INSERT INTO params(
+                        pkey,ptype,pid,min_v,max_v,default_v,unit,rw,esp_rw,dtype,name,format_relevant,
+                        message,possible_cause,effects,remedy,updated_ts
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        "TTP00002",
+                        "TTP",
+                        "00002",
+                        0,
+                        100,
+                        "45",
+                        None,
+                        "R/W",
+                        "W",
+                        "unsigned int.",
+                        "RadialRibbonWidthLimit",
+                        "NO",
+                        None,
+                        None,
+                        None,
+                        None,
+                        now_ts(),
+                    ),
+                )
+                c.execute(
+                    """INSERT INTO param_values(pkey,value,updated_ts) VALUES(?,?,?)""",
+                    ("TTP00002", "47", now_ts()),
+                )
+                c.execute(
+                    """INSERT INTO param_device_map(
+                        pkey, esp_key, zbc_mapping, zbc_message_id, zbc_command_id, zbc_value_codec,
+                        zbc_scale, zbc_offset, ultimate_set_cmd, ultimate_get_cmd, ultimate_var_name, updated_ts
+                    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    (
+                        "TTP00002",
+                        None,
+                        "FRQ[CURRENT_PARAMETERS]/Devices/PHds/1/Consumables/RadialRibbonWidthLimit",
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        None,
+                        now_ts(),
+                    ),
+                )
+
+            cfg = SimpleNamespace(
+                esp_host="",
+                esp_port=0,
+                http_timeout_s=2.0,
+                esp_watchdog_host="",
+                watchdog_timeout_s=1.0,
+                watchdog_down_after=3,
+                vj6530_host="10.0.0.5",
+                vj6530_port=3002,
+                vj3350_host="",
+                vj3350_port=0,
+                esp_simulation=True,
+                vj6530_simulation=False,
+                vj3350_simulation=True,
+            )
+
+            bridge = DeviceBridge(cfg, params, logs)
+            bridge._zbc_bridge = FailingZbcBridgeClient()
+
+            read_resp = bridge.execute("vj6530", "TTP00002", "TTP", "read", "?")
+
+            self.assertEqual("TTP00002=47", read_resp)
 
 
 if __name__ == "__main__":
