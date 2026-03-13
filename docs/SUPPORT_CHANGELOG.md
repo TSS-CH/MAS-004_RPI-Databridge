@@ -4,6 +4,8 @@
 - Added `MAS-004_ZBC-Library` as a new managed subproject.
 - Extended multi-repo status/sync scripts to include the ZBC library.
 - Added bundle-based Pi synchronization for repos without a central Git remote.
+- `MAS-004_VJ6530-ZBC-Bridge` has been switched to consume the shared ZBC library.
+- Live writeback against the real 6530 is now proven through `FTX[CURRENT_PARAMETERS]`.
 
 ## 2026-03-13 (TTO Workbook Mapping via Live CurrentParameters)
 - Extended `MAS-004_ZBC-Library` with a CLARiTY parameter-archive parser and a `request_current_parameters()` helper.
