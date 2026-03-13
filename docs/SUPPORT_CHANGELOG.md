@@ -17,6 +17,8 @@
 - Fixed a PowerShell parsing bug in `scripts/mas004_multirepo_sync.ps1`:
   - bundle-sync `scp` target now uses `${resolvedSshHost}` correctly
   - without this, TEST sync for repos without a central remote aborted before transfer
+- Fixed bundle-sync behavior for missing remote paths:
+  - `MAS-004_ZBC-Library` can now be created on the Pi from the local bundle when `/opt/MAS-004_ZBC-Library` does not exist yet
 
 ## 2026-03-13 (Configurable Forwarding Ports + ESP Port 3010)
 - TCP forwarding no longer hardcodes device main ports.

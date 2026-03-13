@@ -136,17 +136,21 @@ fi
         Write-Host "[PI/$Target] $($repo.Name): unreachable host $resolvedSshHost -> skip" -ForegroundColor Yellow
         return
     }
-    if ($state -eq "REMOTE_MISSING") {
-        Write-Host "[PI/$Target] $($repo.Name): missing path $($repo.Remote)" -ForegroundColor Yellow
-        return
-    }
     if ($state -eq "REMOTE_DIRTY") {
         Write-Host "[PI/$Target] $($repo.Name): dirty -> skip pull (manual decision required)" -ForegroundColor Yellow
         return
     }
 
     if ($repo.BundleSync) {
+        if ($state -eq "REMOTE_MISSING") {
+            Write-Host "[PI/$Target] $($repo.Name): missing path $($repo.Remote) -> create via bundle" -ForegroundColor Cyan
+        }
         Sync-RemoteRepoViaBundle -repo $repo
+        return
+    }
+
+    if ($state -eq "REMOTE_MISSING") {
+        Write-Host "[PI/$Target] $($repo.Name): missing path $($repo.Remote)" -ForegroundColor Yellow
         return
     }
 
